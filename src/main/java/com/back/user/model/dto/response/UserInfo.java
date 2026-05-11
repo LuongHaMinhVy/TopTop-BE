@@ -65,6 +65,8 @@ public class UserInfo {
 
     @Data
     @Builder
+    @NoArgsConstructor
+    @AllArgsConstructor
     @JsonInclude(JsonInclude.Include.NON_NULL)
     public static class PrivacySettings {
         private Boolean allowComments;
@@ -78,6 +80,8 @@ public class UserInfo {
 
     @Data
     @Builder
+    @NoArgsConstructor
+    @AllArgsConstructor
     @JsonInclude(JsonInclude.Include.NON_NULL)
     public static class RelationshipStatus {
         private Boolean isFollowing;

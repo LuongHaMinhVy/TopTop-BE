@@ -2,6 +2,7 @@ package com.back.common.controller;
 
 import com.back.common.utils.exception.AppException;
 import com.back.common.utils.exception.ErrorCode;
+import com.back.common.utils.Translator;
 import com.back.common.model.dto.response.ApiResponse;
 import com.back.common.model.dto.response.ErrorResponse;
 import lombok.RequiredArgsConstructor;
@@ -59,7 +60,7 @@ public class AdviceController {
 
         return ResponseEntity.badRequest().body(
                 ApiResponse.builder()
-                        .message("Validation failed")
+                        .message(Translator.toLocale("error.validation_failed", "Validation failed"))
                         .data(null)
                         .errors(errors)
                         .status(HttpStatus.BAD_REQUEST.value())
@@ -79,12 +80,12 @@ public class AdviceController {
     public ResponseEntity<ApiResponse<Object>> handleAuthenticationException(AuthenticationException ex) {
         return ResponseEntity.status(HttpStatus.UNAUTHORIZED).body(
                 ApiResponse.builder()
-                        .message("Unauthorized")
+                        .message(Translator.toLocale("error.unauthorized", "Unauthorized"))
                         .data(null)
                         .errors(List.of(
                                 ErrorResponse.builder()
                                         .field(null)
-                                        .message("Authentication failed")
+                                        .message(Translator.toLocale("error.authentication_failed", "Authentication failed"))
                                         .build()
                         ))
                         .status(HttpStatus.UNAUTHORIZED.value())
@@ -97,12 +98,12 @@ public class AdviceController {
     public ResponseEntity<ApiResponse<Object>> handleAccessDeniedException(AccessDeniedException ex) {
         return ResponseEntity.status(HttpStatus.FORBIDDEN).body(
                 ApiResponse.builder()
-                        .message("Forbidden")
+                        .message(Translator.toLocale("error.forbidden", "Forbidden"))
                         .data(null)
                         .errors(List.of(
                                 ErrorResponse.builder()
                                         .field(null)
-                                        .message("You do not have permission to access this resource")
+                                        .message(Translator.toLocale("error.access_denied", "You do not have permission to access this resource"))
                                         .build()
                         ))
                         .status(HttpStatus.FORBIDDEN.value())
@@ -115,12 +116,12 @@ public class AdviceController {
     public ResponseEntity<ApiResponse<Object>> handleMissingPartException(MissingServletRequestPartException ex) {
         return ResponseEntity.badRequest().body(
                 ApiResponse.builder()
-                        .message("Missing request part")
+                        .message(Translator.toLocale("error.missing_request_part", "Missing request part"))
                         .data(null)
                         .errors(List.of(
                                 ErrorResponse.builder()
                                         .field(ex.getRequestPartName())
-                                        .message("Required part is missing")
+                                        .message(Translator.toLocale("error.required_part_missing", "Required part is missing"))
                                         .build()
                         ))
                         .status(HttpStatus.BAD_REQUEST.value())
@@ -133,12 +134,12 @@ public class AdviceController {
     public ResponseEntity<ApiResponse<Object>> handleTypeMismatchException(MethodArgumentTypeMismatchException ex) {
         return ResponseEntity.badRequest().body(
                 ApiResponse.builder()
-                        .message("Invalid parameter type")
+                        .message(Translator.toLocale("error.invalid_parameter_type", "Invalid parameter type"))
                         .data(null)
                         .errors(List.of(
                                 ErrorResponse.builder()
                                         .field(ex.getName())
-                                        .message("Invalid value")
+                                        .message(Translator.toLocale("error.invalid_value", "Invalid value"))
                                         .build()
                         ))
                         .status(HttpStatus.BAD_REQUEST.value())
@@ -151,12 +152,12 @@ public class AdviceController {
     public ResponseEntity<ApiResponse<Object>> handleInvalidJsonException(HttpMessageNotReadableException ex) {
         return ResponseEntity.badRequest().body(
                 ApiResponse.builder()
-                        .message("Invalid JSON format")
+                        .message(Translator.toLocale("error.invalid_json_format", "Invalid JSON format"))
                         .data(null)
                         .errors(List.of(
                                 ErrorResponse.builder()
                                         .field(null)
-                                        .message("Malformed request body")
+                                        .message(Translator.toLocale("error.malformed_request_body", "Malformed request body"))
                                         .build()
                         ))
                         .status(HttpStatus.BAD_REQUEST.value())
@@ -170,12 +171,12 @@ public class AdviceController {
     public ResponseEntity<ApiResponse<Object>> handleDataIntegrityException(DataIntegrityViolationException ex) {
         return ResponseEntity.badRequest().body(
                 ApiResponse.builder()
-                        .message("Database constraint violation")
+                        .message(Translator.toLocale("error.database_constraint_violation", "Database constraint violation"))
                         .data(null)
                         .errors(List.of(
                                 ErrorResponse.builder()
                                         .field(null)
-                                        .message("Duplicate or invalid data")
+                                        .message(Translator.toLocale("error.duplicate_or_invalid_data", "Duplicate or invalid data"))
                                         .build()
                         ))
                         .status(HttpStatus.BAD_REQUEST.value())
@@ -190,12 +191,12 @@ public class AdviceController {
         log.error("Unhandled exception: ", ex);
         return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(
                 ApiResponse.builder()
-                        .message("Internal server error")
+                        .message(Translator.toLocale("error.internal_server_error", "Internal server error"))
                         .data(null)
                         .errors(List.of(
                                 ErrorResponse.builder()
                                         .field(null)
-                                        .message("Unexpected error occurred")
+                                        .message(Translator.toLocale("error.unexpected_error_occurred", "Unexpected error occurred"))
                                         .build()
                         ))
                         .status(HttpStatus.INTERNAL_SERVER_ERROR.value())
@@ -219,7 +220,7 @@ public class AdviceController {
     public ResponseEntity<ApiResponse<Object>> handleIllegalArgumentException(IllegalArgumentException ex) {
         return ResponseEntity.badRequest().body(
                 ApiResponse.builder()
-                        .message("Invalid argument")
+                        .message(Translator.toLocale("error.invalid_argument", "Invalid argument"))
                         .data(null)
                         .errors(List.of(
                                 ErrorResponse.builder()

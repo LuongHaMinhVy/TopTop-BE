@@ -15,26 +15,25 @@ import lombok.NoArgsConstructor;
 @Builder
 public class RegisterRequest {
 
-    @NotBlank(message = "Tên người dùng không được để trống")
-    @Size(min = 2, max = 24, message = "Tên người dùng phải từ 2-24 ký tự")
+    @NotBlank(message = "{validation.register.username.notblank}")
+    @Size(min = 2, max = 24, message = "{validation.register.username.size}")
     @Pattern(
             regexp = "^[a-zA-Z0-9._]+$",
-            message = "Tên người dùng chỉ chứa chữ, số, dấu chấm và gạch dưới"
+            message = "{validation.register.username.pattern}"
     )
     private String username;
 
-    @NotBlank(message = "Email không được để trống")
-    @Email(message = "Email không đúng định dạng")
+    @NotBlank(message = "{validation.register.email.notblank}")
+    @Email(message = "{validation.register.email.format}")
     private String email;
 
-    @NotBlank(message = "Mật khẩu không được để trống")
-    @Size(min = 8, max = 20, message = "Mật khẩu phải từ 8-20 ký tự")
+    @NotBlank(message = "{validation.register.password.notblank}")
+    @Size(min = 8, max = 20, message = "{validation.register.password.size}")
     @Pattern(
             regexp = "^(?=.*[a-z])(?=.*[A-Z])(?=.*\\d)(?=.*[@$!%*?&#])[A-Za-z\\d@$!%*?&#]{8,20}$",
-            message = "Mật khẩu phải có chữ hoa, chữ thường, số và ký tự đặc biệt"
+            message = "{validation.register.password.pattern}"
     )
     private String password;
 
-    // Optional: Birthday for age verification (TikTok requires this)
-    private String dateOfBirth; // Format: YYYY-MM-DD
+    private String dateOfBirth;
 }

@@ -8,14 +8,15 @@ import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
 
 public interface IAuthService{
-    AuthResult login(LoginRequest loginRequest);
+
+    AuthResult login(LoginRequest loginRequest, HttpServletResponse response, HttpServletRequest request);
 
     void logout(HttpServletRequest request, HttpServletResponse response);
 
-    AuthResult register(RegisterRequest registerRequest);
+    void register(RegisterRequest registerRequest);
     void verifyEmail(String token);
     void resendVerification(String email);
     void forgotPassword(String email);
     void resetPassword(String token, String newPassword);
-    AuthResponse refreshToken(String authHeader);
+    AuthResponse refreshToken(HttpServletRequest request, HttpServletResponse response);
 }

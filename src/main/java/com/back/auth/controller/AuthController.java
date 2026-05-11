@@ -2,20 +2,19 @@ package com.back.auth.controller;
 
 import com.back.auth.model.dto.request.LoginRequest;
 import com.back.auth.model.dto.request.RegisterRequest;
-import com.back.auth.model.dto.response.AuthResult;
+import com.back.auth.model.dto.request.ResetPasswordRequest;
+import com.back.auth.model.dto.response.AuthResponse;
 import com.back.auth.service.IAuthService;
 import com.back.common.model.dto.response.ApiResponse;
-import jakarta.servlet.http.Cookie;
+import com.back.common.utils.Translator;
+import com.back.common.utils.redis.RateLimit;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
-import org.springframework.web.bind.annotation.PostMapping;
-import org.springframework.web.bind.annotation.RequestBody;
-import org.springframework.web.bind.annotation.RequestMapping;
-import org.springframework.web.bind.annotation.RestController;
+import org.springframework.web.bind.annotation.*;
 
 import java.time.LocalDateTime;
 
@@ -27,32 +26,24 @@ public class AuthController{
     private final IAuthService authService;
 
     @PostMapping("/login")
-    public ResponseEntity<ApiResponse<AuthResult>> login (@Valid @RequestBody LoginRequest loginRequest){
-        AuthResult result = authService.login(loginRequest);
+    @RateLimit(limit = 10, durationInSeconds = 60)
+    public ResponseEntity<ApiResponse<AuthResponse>> login(@Valid @RequestBody LoginRequest loginRequest, HttpServletResponse response, HttpServletRequest request){
+        AuthResponse result = authService.login(loginRequest, response, request).getAuthResponse();
 
-        Cookie refreshCookie = new Cookie("refreshToken", result.getRefreshToken());
-        refreshCookie.setHttpOnly(true);
-        refreshCookie.setSecure(true);
-        refreshCookie.setPath("/api/v1/auth/refresh");
-        refreshCookie.setMaxAge(7 * 24 * 60 * 60);
-
-        result.setRefreshToken(null);
-
-        ApiResponse<AuthResult> res = ApiResponse.<AuthResult>builder()
-                .message("Đăng nhập thành công")
+        return ResponseEntity.ok(ApiResponse.<AuthResponse>builder()
+                .message(Translator.toLocale("auth.login.success", "Login successful"))
                 .data(result)
                 .status(200)
                 .timestamp(LocalDateTime.now())
-                .build();
-
-        return ResponseEntity.ok(res);
+                .build());
     }
 
     @PostMapping("/register")
-    public ResponseEntity<ApiResponse<AuthResult>> register(@Valid @RequestBody RegisterRequest registerRequest){
-        return ResponseEntity.ok(ApiResponse.<AuthResult>builder()
-                .message("Đăng ký thành công, vui lòng xác thực email để đăng nhập")
-                        .data(authService.register(registerRequest))
+    @RateLimit(limit = 10, durationInSeconds = 60)
+    public ResponseEntity<ApiResponse<Void>> register(@Valid @RequestBody RegisterRequest registerRequest){
+        authService.register(registerRequest);
+        return ResponseEntity.status(HttpStatus.CREATED).body(ApiResponse.<Void>builder()
+                .message(Translator.toLocale("auth.register.success", "Registration successful. Please verify your email to login"))
                 .status(HttpStatus.CREATED.value())
                 .timestamp(LocalDateTime.now()).build());
     }
@@ -60,29 +51,60 @@ public class AuthController{
     @PostMapping("/logout")
     public ResponseEntity<ApiResponse<Void>> logout(HttpServletRequest request, HttpServletResponse response){
         authService.logout(request, response);
-
-        Cookie cookie = new Cookie("refreshToken", null);
-        cookie.setHttpOnly(true);
-        cookie.setSecure(true);
-        cookie.setPath("/api/v1/auth/refresh");
-        cookie.setMaxAge(0);
-
-        response.addCookie(cookie);
-
         return ResponseEntity.ok(ApiResponse.<Void>builder()
-                        .message("Đăng xuất thành công")
+                        .message(Translator.toLocale("auth.logout.success", "Logout successful"))
                         .status(HttpStatus.NO_CONTENT.value())
                 .timestamp(LocalDateTime.now())
                 .build());
     }
 
     @PostMapping("/verify-email")
-    public ResponseEntity<ApiResponse<Void>> verifyEmail(String token){
+    public ResponseEntity<ApiResponse<Void>> verifyEmail(@RequestParam String token){
         authService.verifyEmail(token);
         return ResponseEntity.ok(ApiResponse.<Void>builder()
-                        .message("Xác thực email thành công vui lòng đăng nhập")
+                        .message(Translator.toLocale("auth.verify_email.success", "Email verified successfully. Please login"))
                         .status(HttpStatus.OK.value())
                         .timestamp(LocalDateTime.now())
+                .build());
+    }
+
+    @PostMapping("/resend-verification")
+    public ResponseEntity<ApiResponse<Void>> resendVerification(@RequestParam String email){
+        authService.resendVerification(email);
+        return ResponseEntity.ok(ApiResponse.<Void>builder()
+                .message(Translator.toLocale("auth.resend_verification.success", "Verification email resent successfully"))
+                .status(HttpStatus.OK.value())
+                .timestamp(LocalDateTime.now())
+                .build());
+    }
+
+    @PostMapping("/forgot-password")
+    public ResponseEntity<ApiResponse<Void>> forgotPassword(@RequestParam String email){
+        authService.forgotPassword(email);
+        return ResponseEntity.ok(ApiResponse.<Void>builder()
+                .message(Translator.toLocale("auth.forgot_password.success", "Password reset email sent successfully"))
+                .status(HttpStatus.OK.value())
+                .timestamp(LocalDateTime.now())
+                .build());
+    }
+
+    @PostMapping("/reset-password")
+    public ResponseEntity<ApiResponse<Void>> resetPassword(@Valid @RequestBody ResetPasswordRequest request){
+        authService.resetPassword(request.getToken(), request.getNewPassword());
+        return ResponseEntity.ok(ApiResponse.<Void>builder()
+                .message(Translator.toLocale("auth.reset_password.success", "Password reset successfully. Please login"))
+                .status(HttpStatus.OK.value())
+                .timestamp(LocalDateTime.now())
+                .build());
+    }
+
+    @PostMapping("/refresh")
+    public ResponseEntity<ApiResponse<AuthResponse>> refresh(HttpServletRequest request, HttpServletResponse response){
+        return ResponseEntity.ok(ApiResponse.<AuthResponse>builder()
+                .message(Translator.toLocale("auth.refresh.success", "Token refreshed successfully"))
+                .data(authService.refreshToken(request, response))
+                .status(HttpStatus.OK.value())
+                .timestamp(LocalDateTime.now())
                 .build());
     }
 }

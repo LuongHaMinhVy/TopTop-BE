@@ -12,9 +12,9 @@ import lombok.NoArgsConstructor;
 @Builder
 public class ResetPasswordRequest {
 
-    @NotBlank
+    @NotBlank(message = "{validation.reset.token.notblank}")
     private String token;
 
-    @NotBlank
+    @NotBlank(message = "{validation.reset.password.notblank}")
     private String newPassword;
 }

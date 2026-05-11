@@ -3,6 +3,8 @@ package com.back.common.utils.exception;
 import lombok.Getter;
 import org.springframework.http.HttpStatus;
 
+import com.back.common.utils.Translator;
+
 @Getter
 public enum ErrorCode {
 
@@ -50,6 +52,8 @@ public enum ErrorCode {
 
     GENRE_ALREADY_EXISTS(HttpStatus.CONFLICT, "Genre already exists"),
 
+    OAUTH2_EMAIL_NOT_FOUND(HttpStatus.NOT_FOUND, "Email not found in OAuth2 provider"),
+
     COPYRIGHT_DETECTED(HttpStatus.BAD_REQUEST, "Upload rejected: Copyrighted material detected."),
     INTERNAL_ERROR(HttpStatus.INTERNAL_SERVER_ERROR, "Internal server error");
 
@@ -60,5 +64,13 @@ public enum ErrorCode {
     ErrorCode(HttpStatus status, String message) {
         this.status = status;
         this.message = message;
+    }
+
+    public String getMessage() {
+        try {
+            return Translator.toLocale("error." + this.name().toLowerCase(), this.message);
+        } catch (Exception e) {
+            return this.message;
+        }
     }
 }

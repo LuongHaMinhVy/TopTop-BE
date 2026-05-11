@@ -2,10 +2,8 @@ package com.back.auth.model.entity;
 
 import jakarta.persistence.*;
 import lombok.*;
-import org.springframework.scheduling.annotation.Scheduled;
 
 import java.time.Instant;
-import java.time.LocalDateTime;
 
 @Entity
 @Table(name = "blacklisted_tokens")
