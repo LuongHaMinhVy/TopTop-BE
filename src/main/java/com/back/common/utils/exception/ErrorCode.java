@@ -44,7 +44,7 @@ public enum ErrorCode {
     INVALID_FILE_TYPE(HttpStatus.BAD_REQUEST, "Invalid file type."),
     INVALID_VIDEO_FILE_TYPE(HttpStatus.BAD_REQUEST, "Invalid video file type. Only MP4, AVI, MOV, and WMV are supported"),
     INVALID_IMAGE_FILE_TYPE(HttpStatus.BAD_REQUEST, "Invalid image file type. Only JPG, JPEG, PNG, and GIF are supported"),
-    FILE_TOO_LARGE(HttpStatus.BAD_REQUEST, "File is too large. Maximum file size is 5MB"),
+    FILE_TOO_LARGE(HttpStatus.BAD_REQUEST, "File is too large. Maximum file size is 10MB"),
     INVALID_AUDIO_FILE_TYPE(HttpStatus.BAD_REQUEST, "Invalid audio file type. Only MP3, WAV, and OGG are supported"),
 
     INVALID_PAGE(HttpStatus.BAD_REQUEST, "Page must not be less than 1"),

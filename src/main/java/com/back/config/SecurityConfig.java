@@ -43,7 +43,7 @@ public class SecurityConfig {
     private final OAuth2FailureHandler   oauth2FailureHandler;
 
     @Bean
-    public SecurityFilterChain securityFilterChain(HttpSecurity http) {
+    public SecurityFilterChain securityFilterChain(HttpSecurity http) throws Exception {
         http
                 .cors(Customizer.withDefaults())
                 .csrf(AbstractHttpConfigurer::disable)
@@ -68,6 +68,16 @@ public class SecurityConfig {
 
                         .requestMatchers(HttpMethod.OPTIONS, "/**").permitAll()
 
+                        // ── Video endpoints ──────────────────────────────────────
+                        .requestMatchers(HttpMethod.GET, "/api/v1/videos").permitAll()
+                        .requestMatchers(HttpMethod.GET, "/api/v1/videos/{id}").permitAll()
+                        .requestMatchers(HttpMethod.GET, "/api/v1/videos/user/{userId}").permitAll()
+                        .requestMatchers(HttpMethod.POST, "/api/v1/videos/**")
+                        .hasAnyAuthority(RoleName.ROLE_USER.name(), RoleName.ROLE_ADMIN.name())
+                        .requestMatchers(HttpMethod.DELETE, "/api/v1/videos/**")
+                        .hasAnyAuthority(RoleName.ROLE_USER.name(), RoleName.ROLE_ADMIN.name())
+
+                        // ── Track endpoints ──────────────────────────────────────
                         .requestMatchers(HttpMethod.GET, "/api/v1/tracks/**").permitAll()
                         .requestMatchers(HttpMethod.POST, "/api/v1/tracks/**")
                         .hasAnyAuthority(RoleName.ROLE_USER.name(), RoleName.ROLE_ADMIN.name())
