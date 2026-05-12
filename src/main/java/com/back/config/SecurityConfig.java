@@ -63,6 +63,9 @@ public class SecurityConfig {
                                 "/api-docs/**"
                         ).permitAll()
 
+                        .requestMatchers(HttpMethod.GET, "/api/v1/users/me").authenticated()
+                        .requestMatchers(HttpMethod.GET, "/api/v1/users/*").permitAll()
+
                         .requestMatchers(HttpMethod.OPTIONS, "/**").permitAll()
 
                         .requestMatchers(HttpMethod.GET, "/api/v1/tracks/**").permitAll()

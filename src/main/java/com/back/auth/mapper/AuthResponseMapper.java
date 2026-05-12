@@ -1,6 +1,7 @@
 package com.back.auth.mapper;
 
 import com.back.auth.model.dto.response.AuthResponse;
+import com.back.user.model.dto.response.PrivacySettings;
 import com.back.user.model.dto.response.UserInfo;
 import com.back.user.model.entity.User;
 import lombok.RequiredArgsConstructor;
@@ -41,7 +42,7 @@ public class AuthResponseMapper {
                         .map(r -> r.getName().name())
                         .toList())
                 .createdAt(user.getCreatedAt())
-                .privacySettings(UserInfo.PrivacySettings.builder()
+                .privacySettings(PrivacySettings.builder()
                         .allowComments(user.getAllowComments())
                         .allowDuet(user.getAllowDuet())
                         .allowStitch(user.getAllowStitch())

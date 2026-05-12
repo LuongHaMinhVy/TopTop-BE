@@ -1,6 +1,7 @@
 package com.back.user.mapper;
 
 import com.back.user.model.dto.response.UserInfo;
+import com.back.user.model.dto.response.RelationshipStatus;
 import com.back.user.model.entity.User;
 import lombok.Getter;
 import lombok.Setter;
@@ -13,6 +14,10 @@ import java.util.stream.Collectors;
 public class UserInfoMapper{
 
     public static UserInfo buildUserInfo(User user) {
+        return buildUserInfo(user, null);
+    }
+
+    public static UserInfo buildUserInfo(User user, RelationshipStatus relationship) {
         List<String> roles = user.getRoles().stream()
                 .map(role -> role.getName().name())
                 .collect(Collectors.toList());
@@ -40,6 +45,7 @@ public class UserInfoMapper{
                 .region(user.getRegion())
                 .dateOfBirth(user.getDateOfBirth())
                 .roles(roles)
+                .relationship(relationship)
                 .createdAt(user.getCreatedAt())
                 .build();
     }

@@ -8,6 +8,7 @@ import jakarta.servlet.http.HttpServletRequest;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
@@ -20,6 +21,16 @@ public class UserController{
     @GetMapping("/me")
     public ResponseEntity<ApiResponse<UserInfo>> getCurrentUser(HttpServletRequest request) {
         UserInfo userInfo = userService.getUserInfo(request);
+        return ResponseEntity.ok(ApiResponse.<UserInfo>builder()
+                .message("Success")
+                .data(userInfo)
+                .status(200)
+                .build());
+    }
+
+    @GetMapping("/{username}")
+    public ResponseEntity<ApiResponse<UserInfo>> getUserProfile(@PathVariable String username) {
+        UserInfo userInfo = userService.getUserProfile(username);
         return ResponseEntity.ok(ApiResponse.<UserInfo>builder()
                 .message("Success")
                 .data(userInfo)
