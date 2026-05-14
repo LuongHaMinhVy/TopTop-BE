@@ -22,7 +22,7 @@ import org.springframework.web.cors.CorsConfigurationSource;
 import org.springframework.web.cors.UrlBasedCorsConfigurationSource;
 
 import com.back.auth.security.jwt.JwtAuthFilter;
-import com.back.user.model.entity.RoleName;
+import com.back.user.model.enums.RoleName;
 
 import lombok.RequiredArgsConstructor;
 
@@ -83,6 +83,11 @@ public class SecurityConfig {
                         .hasAnyAuthority(RoleName.ROLE_USER.name(), RoleName.ROLE_ADMIN.name())
                         .requestMatchers(HttpMethod.DELETE, "/api/v1/tracks/**")
                         .hasAuthority(RoleName.ROLE_ADMIN.name())
+
+                        // ── Report endpoints ──────────────────────────────────────
+                        .requestMatchers(HttpMethod.GET, "/api/v1/reports/reasons/**").permitAll()
+                        .requestMatchers(HttpMethod.POST, "/api/v1/reports")
+                        .hasAnyAuthority(RoleName.ROLE_USER.name(), RoleName.ROLE_ADMIN.name())
 
                         .requestMatchers("/api/v1/admin/**")
                         .hasAuthority(RoleName.ROLE_ADMIN.name())

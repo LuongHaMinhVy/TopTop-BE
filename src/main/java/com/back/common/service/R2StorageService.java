@@ -44,6 +44,7 @@ public class R2StorageService {
                         .key(key)
                         .contentType(file.getContentType())
                         .contentLength(file.getSize())
+                        .cacheControl("public, max-age=31536000, immutable")
                         .build(),
                 RequestBody.fromInputStream(file.getInputStream(), file.getSize())
         );
@@ -59,7 +60,8 @@ public class R2StorageService {
                             .putObjectRequest(r -> r
                                     .bucket(props.bucketName())
                                     .key(key)
-                                    .contentType(file.getContentType()))
+                                    .contentType(file.getContentType())
+                                    .cacheControl("public, max-age=31536000, immutable"))
                             .source(tmp)
                             .build())
                     .completionFuture()

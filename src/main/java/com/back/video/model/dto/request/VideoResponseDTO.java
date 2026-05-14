@@ -1,4 +1,4 @@
-package com.back.video.model.dto;
+package com.back.video.model.dto.request;
 
 import lombok.AllArgsConstructor;
 import lombok.Builder;

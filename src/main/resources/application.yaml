@@ -12,6 +12,18 @@ spring:
             scope:
               - email
               - profile
+          facebook:
+            client-id: ${FACEBOOK_APP_ID}
+            client-secret: ${FACEBOOK_APP_SECRET}
+            scope:
+              - email
+              - public_profile
+        provider:
+          facebook:
+            authorization-uri: https://www.facebook.com/v18.0/dialog/oauth
+            token-uri: https://graph.facebook.com/v18.0/oauth/access_token
+            user-info-uri: https://graph.facebook.com/me?fields=id,name,email,picture
+            user-name-attribute: id
   servlet:
     multipart:
       max-file-size: ${MAX_FILE_SIZE}
@@ -49,7 +61,10 @@ spring:
     redis:
       host: ${REDIS_HOST}
       port: ${REDIS_PORT}
+      password: ${REDIS_PASSWORD}
       timeout: ${REDIS_TIMEOUT}
+      ssl:
+        enabled: true
 
 server:
   port: 8080

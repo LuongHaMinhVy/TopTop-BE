@@ -1,7 +1,7 @@
 package com.back.user.repo;
 
 import com.back.user.model.entity.Role;
-import com.back.user.model.entity.RoleName;
+import com.back.user.model.enums.RoleName;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.stereotype.Repository;
 

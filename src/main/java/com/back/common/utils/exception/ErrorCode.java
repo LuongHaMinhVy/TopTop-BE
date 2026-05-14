@@ -56,9 +56,18 @@ public enum ErrorCode {
 
     COPYRIGHT_DETECTED(HttpStatus.BAD_REQUEST, "Upload rejected: Copyrighted material detected."),
     CANNOT_FOLLOW_SELF(HttpStatus.BAD_REQUEST, "You cannot follow yourself"),
+    ADMIN_LOGIN_NOT_ALLOWED(HttpStatus.FORBIDDEN, "Admin accounts are not allowed to log in to the user application"),
+    USER_LOGIN_NOT_ALLOWED(HttpStatus.FORBIDDEN, "Only admin accounts can log in to the admin portal"),
+    
+    REPORT_TARGET_TYPE_NOT_SUPPORTED(HttpStatus.BAD_REQUEST, "Report target type not supported"),
+    REPORT_REASON_NOT_FOUND(HttpStatus.NOT_FOUND, "Report reason not found"),
+    REPORT_REASON_MUST_BE_LEAF(HttpStatus.BAD_REQUEST, "Report reason must be a specific reason, not a category"),
+    REPORT_ALREADY_SUBMITTED(HttpStatus.CONFLICT, "You have already reported this content for this reason"),
+    REPORT_RATE_LIMIT_EXCEEDED(HttpStatus.TOO_MANY_REQUESTS, "You have submitted too many reports recently. Please try again later"),
+    VIDEO_NOT_FOUND(HttpStatus.NOT_FOUND, "Video not found"),
+    COMMENT_NOT_FOUND(HttpStatus.NOT_FOUND, "Comment not found"),
+    
     INTERNAL_ERROR(HttpStatus.INTERNAL_SERVER_ERROR, "Internal server error");
-
-
     private final HttpStatus status;
     private final String message;
 

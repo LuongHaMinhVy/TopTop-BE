@@ -11,6 +11,7 @@ import java.util.Optional;
 public interface IFollowRepo extends JpaRepository<Follow, Long> {
     Optional<Follow> findByFollowerAndFollowing(User follower, User following);
     boolean existsByFollowerAndFollowing(User follower, User following);
+    java.util.List<Follow> findByFollower(User follower);
     long countByFollower(User follower);
     long countByFollowing(User following);
 }

@@ -1,7 +1,7 @@
 package com.back.auth.security.principal;
 
 import com.back.user.model.entity.User;
-import com.back.user.model.entity.UserStatus;
+import com.back.user.model.enums.UserStatus;
 import org.springframework.security.core.GrantedAuthority;
 import org.springframework.security.core.authority.SimpleGrantedAuthority;
 import org.springframework.security.core.userdetails.UserDetails;

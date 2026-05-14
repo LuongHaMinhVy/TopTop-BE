@@ -1,6 +1,9 @@
 package com.back.user.model.entity;
 
 import com.back.common.model.entity.BaseEntity;
+import com.back.user.model.enums.AccountType;
+import com.back.user.model.enums.Gender;
+import com.back.user.model.enums.UserStatus;
 import jakarta.persistence.*;
 import lombok.*;
 import lombok.experimental.SuperBuilder;

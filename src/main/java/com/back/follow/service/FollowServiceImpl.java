@@ -11,6 +11,10 @@ import lombok.RequiredArgsConstructor;
 import org.springframework.security.core.Authentication;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.security.oauth2.client.authentication.OAuth2AuthenticationToken;
+import com.back.user.mapper.UserInfoMapper;
+import com.back.user.model.dto.response.UserInfo;
+import java.util.List;
+import java.util.stream.Collectors;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -100,5 +104,15 @@ public class FollowServiceImpl implements IFollowService {
                 .isFollower(isFollower)
                 .isFriend(isFollowing && isFollower)
                 .build();
+    }
+
+    @Override
+    public List<UserInfo> getFollowingList() {
+        User currentUser = getCurrentUser();
+        if (currentUser == null) return List.of();
+
+        return followRepo.findByFollower(currentUser).stream()
+                .map(follow -> UserInfoMapper.buildUserInfo(follow.getFollowing()))
+                .collect(Collectors.toList());
     }
 }

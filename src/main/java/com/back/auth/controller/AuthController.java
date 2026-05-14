@@ -33,7 +33,7 @@ public class AuthController{
         return ResponseEntity.ok(ApiResponse.<AuthResponse>builder()
                 .message(Translator.toLocale("auth.login.success", "Login successful"))
                 .data(result)
-                .status(200)
+                .status(HttpStatus.OK.value())
                 .timestamp(LocalDateTime.now())
                 .build());
     }

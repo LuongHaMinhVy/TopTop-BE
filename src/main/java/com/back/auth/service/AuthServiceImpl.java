@@ -13,6 +13,9 @@ import com.back.common.utils.exception.ErrorCode;
 import com.back.user.mapper.UserInfoMapper;
 import com.back.user.model.dto.response.UserInfo;
 import com.back.user.model.entity.*;
+import com.back.user.model.enums.AccountType;
+import com.back.user.model.enums.RoleName;
+import com.back.user.model.enums.UserStatus;
 import com.back.user.repo.IRoleRepo;
 import com.back.user.repo.IUserRepo;
 import jakarta.servlet.http.HttpServletRequest;
@@ -74,6 +77,19 @@ public class AuthServiceImpl implements IAuthService {
         }
         if (!user.getVerified()) {
             throw new AppException(ErrorCode.EMAIL_NOT_VERIFIED);
+        }
+
+        // Check app type and roles
+        String appId = request.getHeader("X-App-Id");
+        boolean isAdmin = user.getRoles().stream()
+                .anyMatch(role -> role.getName().equals(RoleName.ROLE_ADMIN));
+
+        if ("toptopuser".equals(appId) && isAdmin) {
+            throw new AppException(ErrorCode.ADMIN_LOGIN_NOT_ALLOWED);
+        }
+
+        if ("toptopadmin".equals(appId) && !isAdmin) {
+            throw new AppException(ErrorCode.USER_LOGIN_NOT_ALLOWED);
         }
 
         userRepo.save(user);

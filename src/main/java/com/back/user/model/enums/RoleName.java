@@ -1,4 +1,4 @@
-package com.back.user.model.entity;
+package com.back.user.model.enums;
 
 public enum RoleName {
     ROLE_USER,

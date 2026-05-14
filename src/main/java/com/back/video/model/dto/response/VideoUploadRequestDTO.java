@@ -1,4 +1,4 @@
-package com.back.video.model.dto;
+package com.back.video.model.dto.response;
 
 import jakarta.validation.constraints.NotBlank;
 import lombok.AllArgsConstructor;
@@ -17,4 +17,10 @@ public class VideoUploadRequestDTO {
     private String description;
     
     private String category;
+
+    private String visibility;
+
+    private Boolean allowComments;
+
+    private Boolean allowEdit;
 }

@@ -1,14 +1,19 @@
 package com.back.video.service;
 
+import com.back.notification.service.INotificationService;
+
 import com.back.common.service.R2StorageService;
 import com.back.common.utils.exception.AppException;
 import com.back.common.utils.exception.ErrorCode;
 import com.back.user.model.entity.User;
 import com.back.user.repo.IUserRepo;
-import com.back.video.model.dto.VideoResponseDTO;
-import com.back.video.model.dto.VideoUploadRequestDTO;
+import com.back.video.model.dto.request.VideoResponseDTO;
+import com.back.video.model.dto.response.VideoUploadRequestDTO;
 import com.back.video.model.entity.Video;
 import com.back.video.repo.IVideoRepository;
+import com.back.hashtag.repo.IHashtagRepository;
+import com.back.hashtag.model.entity.Hashtag;
+import com.back.video.model.enums.VideoVisibility;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.scheduling.annotation.Scheduled;
@@ -17,14 +22,14 @@ import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.security.oauth2.client.authentication.OAuth2AuthenticationToken;
 import org.springframework.stereotype.Service;
 import org.springframework.web.multipart.MultipartFile;
-
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.time.LocalDateTime;
 import java.util.List;
 import java.util.UUID;
-import java.util.stream.Collectors;
 
 @Slf4j
 @Service
@@ -34,9 +39,10 @@ public class VideoServiceImpl implements IVideoService {
     private final IVideoRepository videoRepository;
     private final IUserRepo userRepo;
     private final R2StorageService storageService;
+    private final IHashtagRepository hashtagRepo;
 
     @Override
-    public VideoResponseDTO uploadVideo(MultipartFile file, VideoUploadRequestDTO requestDTO) throws IOException {
+    public VideoResponseDTO uploadVideo(MultipartFile file, MultipartFile cover, VideoUploadRequestDTO requestDTO) throws IOException {
         User user = getCurrentUser();
         if (user == null) {
             throw new AppException(ErrorCode.UNAUTHORIZED);
@@ -48,6 +54,13 @@ public class VideoServiceImpl implements IVideoService {
         String key = "video-storage/" + UUID.randomUUID() + extension;
         String url = storageService.uploadFile(file, key);
 
+        String coverUrl = null;
+        if (cover != null && !cover.isEmpty()) {
+            String coverExtension = getFileExtension(cover.getOriginalFilename());
+            String coverKey = "video-storage/covers/" + UUID.randomUUID() + coverExtension;
+            coverUrl = storageService.uploadFile(cover, coverKey);
+        }
+
         Integer duration = null;
         try {
             duration = extractDuration(file);
@@ -55,13 +68,31 @@ public class VideoServiceImpl implements IVideoService {
             log.warn("Failed to extract video duration: {}", e.getMessage());
         }
 
+        java.util.Set<Hashtag> extractedHashtags = new java.util.HashSet<>();
+        if (requestDTO.getDescription() != null) {
+            java.util.regex.Matcher matcher = java.util.regex.Pattern.compile("#(\\w+)").matcher(requestDTO.getDescription());
+            while (matcher.find()) {
+                String hashtagName = matcher.group(1).toLowerCase();
+                Hashtag hashtag = hashtagRepo.findByName(hashtagName)
+                        .orElseGet(() -> hashtagRepo.save(Hashtag.builder().name(hashtagName).postCount(0L).build()));
+                hashtag.setPostCount(hashtag.getPostCount() + 1);
+                hashtagRepo.save(hashtag);
+                extractedHashtags.add(hashtag);
+            }
+        }
+
         Video video = Video.builder()
                 .title(requestDTO.getTitle())
                 .description(requestDTO.getDescription())
                 .category(requestDTO.getCategory())
                 .fileUrl(url)
+                .thumbnailUrl(coverUrl)
                 .duration(duration)
                 .user(user)
+                .hashtags(extractedHashtags)
+                .visibility(requestDTO.getVisibility() != null ? VideoVisibility.valueOf(requestDTO.getVisibility()) : VideoVisibility.PUBLIC)
+                .allowComments(requestDTO.getAllowComments() != null ? requestDTO.getAllowComments() : true)
+                .allowEdit(requestDTO.getAllowEdit() != null ? requestDTO.getAllowEdit() : false)
                 .build();
 
         video = videoRepository.save(video);
@@ -77,17 +108,15 @@ public class VideoServiceImpl implements IVideoService {
     }
 
     @Override
-    public List<VideoResponseDTO> getAllVideos() {
-        return videoRepository.findAll().stream()
-                .map(this::mapToResponseDTO)
-                .collect(Collectors.toList());
+    public Page<VideoResponseDTO> getAllVideos(Pageable pageable) {
+        return videoRepository.findAll(pageable)
+                .map(this::mapToResponseDTO);
     }
 
     @Override
-    public List<VideoResponseDTO> getVideosByUserId(Long userId) {
-        return videoRepository.findByUserId(userId).stream()
-                .map(this::mapToResponseDTO)
-                .collect(Collectors.toList());
+    public Page<VideoResponseDTO> getVideosByUserId(Long userId, Pageable pageable) {
+        return videoRepository.findByUserId(userId, pageable)
+                .map(this::mapToResponseDTO);
     }
 
     @Override
@@ -102,6 +131,66 @@ public class VideoServiceImpl implements IVideoService {
 
         video.setDeletedAt(LocalDateTime.now());
         videoRepository.save(video);
+    }
+
+    @Override
+    public void reportVideo(Long id, String reason) {
+        Video video = videoRepository.findById(id)
+                .orElseThrow(() -> new AppException(ErrorCode.FILE_NOT_FOUND));
+        log.info("Video {} reported for reason: {}", id, reason);
+        // In a real app, we would save this to a Report entity
+    }
+
+    private final INotificationService notificationService;
+
+    @Override
+    public void likeVideo(Long id) {
+        Video video = videoRepository.findById(id)
+                .orElseThrow(() -> new AppException(ErrorCode.FILE_NOT_FOUND));
+        
+        User currentUser = getCurrentUser();
+        video.setLikeCount(video.getLikeCount() + 1);
+        videoRepository.save(video);
+
+        if (currentUser != null) {
+            notificationService.createNotification(
+                    video.getUser(),
+                    currentUser,
+                    video,
+                    "LIKE",
+                    currentUser.getUsername() + " liked your video: " + video.getTitle()
+            );
+        }
+    }
+
+    @Override
+    public void unlikeVideo(Long id) {
+        Video video = videoRepository.findById(id)
+                .orElseThrow(() -> new AppException(ErrorCode.FILE_NOT_FOUND));
+        if (video.getLikeCount() > 0) {
+            video.setLikeCount(video.getLikeCount() - 1);
+            videoRepository.save(video);
+        }
+    }
+
+    @Override
+    public Page<VideoResponseDTO> getFavoriteVideos(Pageable pageable) {
+        // Return dummy favorites for now, e.g. all videos or empty list
+        // In a real app, query from Collections/Favorites table for the current user
+        return videoRepository.findAll(pageable)
+                .map(this::mapToResponseDTO);
+    }
+
+    @Override
+    public VideoResponseDTO getVideoByUsernameAndId(String username, Long videoId) {
+        Video video = videoRepository.findByUserUsernameAndId(username, videoId)
+                .orElseThrow(() -> new AppException(ErrorCode.FILE_NOT_FOUND));
+        
+        // Increment view count
+        video.setViewCount(video.getViewCount() + 1);
+        videoRepository.save(video);
+        
+        return mapToResponseDTO(video);
     }
 
     @Scheduled(cron = "0 0 3 * * *")
