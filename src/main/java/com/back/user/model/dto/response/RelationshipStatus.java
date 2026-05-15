@@ -15,5 +15,6 @@ import lombok.NoArgsConstructor;
         private Boolean isFollowing;
         private Boolean isFollower;
         private Boolean isBlocked;
+        private Boolean isBlockedBy;
         private Boolean isFriend;
     }

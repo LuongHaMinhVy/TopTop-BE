@@ -8,7 +8,7 @@ import java.util.List;
 import java.util.Optional;
 
 @Repository
-public interface IReportReasonRepository extends JpaRepository<ReportReason, Long> {
+public interface IReportReasonRepo extends JpaRepository<ReportReason, Long> {
 
     List<ReportReason> findByParentIsNullAndActiveTrueOrderBySortOrderAsc();
 

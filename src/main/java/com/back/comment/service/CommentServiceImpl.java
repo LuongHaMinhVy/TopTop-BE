@@ -4,6 +4,7 @@ import com.back.comment.model.dto.request.CommentRequestDTO;
 import com.back.comment.model.dto.response.CommentResponseDTO;
 import com.back.comment.model.entity.Comment;
 import com.back.comment.repo.ICommentRepo;
+import com.back.block.service.IUserBlockService;
 import com.back.notification.service.INotificationService;
 import com.back.user.model.entity.User;
 import com.back.user.repo.IUserRepo;
@@ -16,6 +17,8 @@ import org.springframework.security.core.Authentication;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
 import java.util.List;
 import java.util.stream.Collectors;
 
@@ -26,6 +29,7 @@ public class CommentServiceImpl implements ICommentService {
     private final IVideoRepository videoRepository;
     private final INotificationService notificationService;
     private final IUserRepo userRepo;
+    private final IUserBlockService userBlockService;
 
     @Override
     @Transactional
@@ -33,6 +37,7 @@ public class CommentServiceImpl implements ICommentService {
         User user = getCurrentUser();
         Video video = videoRepository.findById(videoId)
                 .orElseThrow(() -> new AppException(ErrorCode.FILE_NOT_FOUND));
+        userBlockService.assertNotBlockedEitherWay(user, video.getUser());
 
         Comment.CommentBuilder builder = Comment.builder()
                 .user(user)
@@ -63,14 +68,15 @@ public class CommentServiceImpl implements ICommentService {
     }
 
     @Override
-    public List<CommentResponseDTO> getCommentsByVideo(Long videoId) {
+    public Page<CommentResponseDTO> getCommentsByVideo(Long videoId, Pageable pageable) {
         Video video = videoRepository.findById(videoId)
                 .orElseThrow(() -> new AppException(ErrorCode.FILE_NOT_FOUND));
+        userBlockService.assertNotBlockedEitherWay(getCurrentUser(), video.getUser());
         
-        return commentRepo.findByVideoWithUser(video).stream()
-                .map(this::mapToResponseDTO)
-                .collect(Collectors.toList());
+        return commentRepo.findByVideoWithUser(video, pageable)
+                .map(this::mapToResponseDTO);
     }
+
 
     @Override
     @Transactional

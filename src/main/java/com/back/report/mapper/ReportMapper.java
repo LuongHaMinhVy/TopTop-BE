@@ -6,7 +6,7 @@ import com.back.report.model.dto.response.ReportReasonTreeResponseDTO;
 import com.back.report.model.dto.response.ReportResponseDTO;
 import com.back.report.model.entity.Report;
 import com.back.report.model.entity.ReportReason;
-import com.back.report.repo.IReportReasonRepository;
+import com.back.report.repo.IReportReasonRepo;
 import lombok.RequiredArgsConstructor;
 import org.springframework.context.i18n.LocaleContextHolder;
 import org.springframework.stereotype.Component;
@@ -19,7 +19,7 @@ import java.util.stream.Collectors;
 @RequiredArgsConstructor
 public class ReportMapper {
 
-    private final IReportReasonRepository reasonRepository;
+    private final IReportReasonRepo reasonRepository;
 
     public ReportReasonResponseDTO toReasonResponseDTO(ReportReason reason) {
         if (reason == null) return null;

@@ -1,7 +1,9 @@
 package com.back.video.service;
 
+import com.back.collection.repo.SavedVideoRepository;
 import com.back.notification.service.INotificationService;
 
+import com.back.block.service.IUserBlockService;
 import com.back.common.service.R2StorageService;
 import com.back.common.utils.exception.AppException;
 import com.back.common.utils.exception.ErrorCode;
@@ -28,8 +30,12 @@ import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.time.LocalDateTime;
+import java.util.HashSet;
 import java.util.List;
+import java.util.Set;
 import java.util.UUID;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 
 @Slf4j
 @Service
@@ -40,6 +46,8 @@ public class VideoServiceImpl implements IVideoService {
     private final IUserRepo userRepo;
     private final R2StorageService storageService;
     private final IHashtagRepository hashtagRepo;
+    private final SavedVideoRepository savedVideoRepository;
+    private final IUserBlockService userBlockService;
 
     @Override
     public VideoResponseDTO uploadVideo(MultipartFile file, MultipartFile cover, VideoUploadRequestDTO requestDTO) throws IOException {
@@ -68,9 +76,9 @@ public class VideoServiceImpl implements IVideoService {
             log.warn("Failed to extract video duration: {}", e.getMessage());
         }
 
-        java.util.Set<Hashtag> extractedHashtags = new java.util.HashSet<>();
+        Set<Hashtag> extractedHashtags = new HashSet<>();
         if (requestDTO.getDescription() != null) {
-            java.util.regex.Matcher matcher = java.util.regex.Pattern.compile("#(\\w+)").matcher(requestDTO.getDescription());
+            Matcher matcher = Pattern.compile("#(\\w+)").matcher(requestDTO.getDescription());
             while (matcher.find()) {
                 String hashtagName = matcher.group(1).toLowerCase();
                 Hashtag hashtag = hashtagRepo.findByName(hashtagName)
@@ -104,18 +112,24 @@ public class VideoServiceImpl implements IVideoService {
     public VideoResponseDTO getVideoById(Long id) {
         Video video = videoRepository.findById(id)
                 .orElseThrow(() -> new AppException(ErrorCode.FILE_NOT_FOUND));
+        userBlockService.assertNotBlockedEitherWay(getCurrentUser(), video.getUser());
         return mapToResponseDTO(video);
     }
 
     @Override
     public Page<VideoResponseDTO> getAllVideos(Pageable pageable) {
-        return videoRepository.findAll(pageable)
+        User currentUser = getCurrentUser();
+        return videoRepository.findAllVisibleForViewer(currentUser == null ? null : currentUser.getId(), pageable)
                 .map(this::mapToResponseDTO);
     }
 
     @Override
     public Page<VideoResponseDTO> getVideosByUserId(Long userId, Pageable pageable) {
-        return videoRepository.findByUserId(userId, pageable)
+        User currentUser = getCurrentUser();
+        return videoRepository.findByUserIdVisibleForViewer(
+                        userId,
+                        currentUser == null ? null : currentUser.getId(),
+                        pageable)
                 .map(this::mapToResponseDTO);
     }
 
@@ -137,6 +151,7 @@ public class VideoServiceImpl implements IVideoService {
     public void reportVideo(Long id, String reason) {
         Video video = videoRepository.findById(id)
                 .orElseThrow(() -> new AppException(ErrorCode.FILE_NOT_FOUND));
+        userBlockService.assertNotBlockedEitherWay(getCurrentUser(), video.getUser());
         log.info("Video {} reported for reason: {}", id, reason);
         // In a real app, we would save this to a Report entity
     }
@@ -149,6 +164,7 @@ public class VideoServiceImpl implements IVideoService {
                 .orElseThrow(() -> new AppException(ErrorCode.FILE_NOT_FOUND));
         
         User currentUser = getCurrentUser();
+        userBlockService.assertNotBlockedEitherWay(currentUser, video.getUser());
         video.setLikeCount(video.getLikeCount() + 1);
         videoRepository.save(video);
 
@@ -167,6 +183,7 @@ public class VideoServiceImpl implements IVideoService {
     public void unlikeVideo(Long id) {
         Video video = videoRepository.findById(id)
                 .orElseThrow(() -> new AppException(ErrorCode.FILE_NOT_FOUND));
+        userBlockService.assertNotBlockedEitherWay(getCurrentUser(), video.getUser());
         if (video.getLikeCount() > 0) {
             video.setLikeCount(video.getLikeCount() - 1);
             videoRepository.save(video);
@@ -174,19 +191,11 @@ public class VideoServiceImpl implements IVideoService {
     }
 
     @Override
-    public Page<VideoResponseDTO> getFavoriteVideos(Pageable pageable) {
-        // Return dummy favorites for now, e.g. all videos or empty list
-        // In a real app, query from Collections/Favorites table for the current user
-        return videoRepository.findAll(pageable)
-                .map(this::mapToResponseDTO);
-    }
-
-    @Override
     public VideoResponseDTO getVideoByUsernameAndId(String username, Long videoId) {
         Video video = videoRepository.findByUserUsernameAndId(username, videoId)
                 .orElseThrow(() -> new AppException(ErrorCode.FILE_NOT_FOUND));
-        
-        // Increment view count
+        userBlockService.assertNotBlockedEitherWay(getCurrentUser(), video.getUser());
+
         video.setViewCount(video.getViewCount() + 1);
         videoRepository.save(video);
         
@@ -269,6 +278,9 @@ public class VideoServiceImpl implements IVideoService {
     }
 
     private VideoResponseDTO mapToResponseDTO(Video video) {
+        User currentUser = getCurrentUser();
+        boolean isSaved = currentUser != null && savedVideoRepository.existsByUserIdAndVideoId(currentUser.getId(), video.getId());
+
         return VideoResponseDTO.builder()
                 .id(video.getId())
                 .title(video.getTitle())
@@ -280,11 +292,13 @@ public class VideoServiceImpl implements IVideoService {
                 .viewCount(video.getViewCount())
                 .likeCount(video.getLikeCount())
                 .commentCount(video.getCommentCount())
+                .saveCount(video.getSaveCount() == null ? 0L : video.getSaveCount())
                 .userId(video.getUser().getId())
                 .username(video.getUser().getUsername())
                 .userNickname(video.getUser().getNickname())
                 .userAvatarUrl(video.getUser().getAvatarUrl())
                 .createdAt(video.getCreatedAt())
+                .isSaved(isSaved)
                 .build();
     }
 }

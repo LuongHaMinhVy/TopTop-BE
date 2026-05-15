@@ -51,6 +51,10 @@ public class Video extends BaseEntity {
     @Column(nullable = false)
     private Long commentCount = 0L;
 
+    @Builder.Default
+    @Column(nullable = false)
+    private Long saveCount = 0L;
+
     @Enumerated(EnumType.STRING)
     @Column(nullable = false)
     @Builder.Default

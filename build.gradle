@@ -54,6 +54,12 @@ dependencies {
     implementation 'software.amazon.awssdk:s3'
 
     implementation 'software.amazon.awssdk:s3-transfer-manager'
+
+    implementation 'org.springframework.boot:spring-boot-starter-websocket'
+    implementation 'org.springframework.boot:spring-boot-starter-json'
+
+    testImplementation 'org.springframework.boot:spring-boot-starter-test'
+
 }
 
 tasks.named('test') {

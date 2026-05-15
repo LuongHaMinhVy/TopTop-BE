@@ -17,6 +17,5 @@ public interface IVideoService {
     void reportVideo(Long id, String reason);
     void likeVideo(Long id);
     void unlikeVideo(Long id);
-    Page<VideoResponseDTO> getFavoriteVideos(Pageable pageable);
     VideoResponseDTO getVideoByUsernameAndId(String username, Long videoId);
 }

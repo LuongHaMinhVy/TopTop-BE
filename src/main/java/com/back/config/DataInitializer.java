@@ -2,7 +2,7 @@ package com.back.config;
 
 import com.back.report.model.entity.ReportReason;
 import com.back.report.model.enums.ReportReasonType;
-import com.back.report.repo.IReportReasonRepository;
+import com.back.report.repo.IReportReasonRepo;
 import com.back.user.model.entity.Role;
 import com.back.user.model.enums.RoleName;
 import com.back.user.repo.IRoleRepo;
@@ -40,7 +40,7 @@ public class DataInitializer {
     }
 
     @Bean
-    CommandLineRunner initReportReasons(IReportReasonRepository reasonRepo) {
+    CommandLineRunner initReportReasons(IReportReasonRepo reasonRepo) {
         return args -> {
             if (reasonRepo.count() == 0) {
                 ReportReason nudity = ReportReason.builder()

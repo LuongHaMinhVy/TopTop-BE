@@ -1,0 +1,331 @@
+package com.back.collection.service;
+
+import com.back.collection.mapper.CollectionMapper;
+import com.back.collection.model.dto.request.CreateCollectionRequestDTO;
+import com.back.collection.model.dto.request.UpdateCollectionRequestDTO;
+import com.back.collection.model.dto.response.CollectionResponseDTO;
+import com.back.collection.model.entity.CollectionVideo;
+import com.back.collection.model.entity.SavedVideo;
+import com.back.collection.model.entity.VideoCollection;
+import com.back.collection.repo.CollectionVideoRepository;
+import com.back.collection.repo.SavedVideoRepository;
+import com.back.collection.repo.VideoCollectionRepository;
+import com.back.block.service.IUserBlockService;
+import com.back.common.utils.exception.AppException;
+import com.back.common.utils.exception.ErrorCode;
+import com.back.user.model.entity.User;
+import com.back.user.repo.IUserRepo;
+import com.back.video.model.dto.request.VideoResponseDTO;
+import com.back.video.model.entity.Video;
+import com.back.video.repo.IVideoRepository;
+import lombok.RequiredArgsConstructor;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
+import org.springframework.security.core.Authentication;
+import org.springframework.security.core.context.SecurityContextHolder;
+import org.springframework.security.oauth2.client.authentication.OAuth2AuthenticationToken;
+import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
+
+import java.util.List;
+
+@Service
+@RequiredArgsConstructor
+public class CollectionServiceImpl implements ICollectionService {
+
+    private final SavedVideoRepository savedVideoRepository;
+    private final VideoCollectionRepository videoCollectionRepository;
+    private final CollectionVideoRepository collectionVideoRepository;
+    private final IVideoRepository videoRepository;
+    private final IUserRepo userRepo;
+    private final CollectionMapper collectionMapper;
+    private final IUserBlockService userBlockService;
+
+    @Override
+    @Transactional(readOnly = true)
+    public Page<VideoResponseDTO> getFavoriteVideos(Pageable pageable) {
+        User user = getCurrentUserOrThrow();
+        return savedVideoRepository.findVisibleByUserIdOrderByCreatedAtDesc(user.getId(), pageable)
+                .map(savedVideo -> mapToVideoResponseDTO(savedVideo.getVideo(), true));
+    }
+
+    @Override
+    @Transactional
+    public VideoResponseDTO saveVideo(Long videoId) {
+        User user = getCurrentUserOrThrow();
+        Video video = getVideoOrThrow(videoId);
+        userBlockService.assertNotBlockedEitherWay(user, video.getUser());
+
+        if (!savedVideoRepository.existsByUserIdAndVideoId(user.getId(), videoId)) {
+            savedVideoRepository.save(SavedVideo.builder()
+                    .user(user)
+                    .video(video)
+                    .build());
+            video.setSaveCount(getSaveCount(video) + 1);
+            videoRepository.save(video);
+        }
+
+        return mapToVideoResponseDTO(video, true);
+    }
+
+    @Override
+    @Transactional
+    public VideoResponseDTO unsaveVideo(Long videoId) {
+        User user = getCurrentUserOrThrow();
+        Video video = getVideoOrThrow(videoId);
+        userBlockService.assertNotBlockedEitherWay(user, video.getUser());
+
+        savedVideoRepository.findByUserIdAndVideoId(user.getId(), videoId)
+                .ifPresent(savedVideo -> {
+                    collectionVideoRepository.deleteByVideoIdAndCollectionUserId(videoId, user.getId());
+                    savedVideoRepository.delete(savedVideo);
+                    if (getSaveCount(video) > 0) {
+                        video.setSaveCount(getSaveCount(video) - 1);
+                        videoRepository.save(video);
+                    }
+                });
+
+        return mapToVideoResponseDTO(video, false);
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public List<CollectionResponseDTO> getCollections() {
+        User user = getCurrentUserOrThrow();
+        return videoCollectionRepository.findByUserIdOrderByCreatedAtDesc(user.getId())
+                .stream()
+                .map(collectionMapper::toResponseDTO)
+                .toList();
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public List<CollectionResponseDTO> getUserCollections(String username) {
+        User owner = userRepo.findByUsername(username)
+                .orElseThrow(() -> new AppException(ErrorCode.USER_NOT_FOUND));
+        User currentUser = getCurrentUserOrNull();
+        assertCanViewOwner(currentUser, owner);
+
+        boolean isOwner = currentUser != null && currentUser.getId().equals(owner.getId());
+        List<VideoCollection> collections = isOwner
+                ? videoCollectionRepository.findByUserIdOrderByCreatedAtDesc(owner.getId())
+                : videoCollectionRepository.findByUserIdAndIsPublicTrueOrderByCreatedAtDesc(owner.getId());
+
+        return collections.stream()
+                .map(collectionMapper::toResponseDTO)
+                .toList();
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public CollectionResponseDTO getUserCollection(String username, Long collectionId) {
+        VideoCollection collection = getCollectionForProfileOrThrow(username, collectionId);
+        return collectionMapper.toResponseDTO(collection);
+    }
+
+    @Override
+    @Transactional
+    public CollectionResponseDTO createCollection(CreateCollectionRequestDTO requestDTO) {
+        User user = getCurrentUserOrThrow();
+        String name = requestDTO.getName().trim();
+
+        if (videoCollectionRepository.existsByUserIdAndNameIgnoreCase(user.getId(), name)) {
+            throw new AppException(ErrorCode.COLLECTION_ALREADY_EXISTS, "name");
+        }
+
+        VideoCollection collection = videoCollectionRepository.save(VideoCollection.builder()
+                .user(user)
+                .name(name)
+                .description(normalizeDescription(requestDTO.getDescription()))
+                .isPublic(Boolean.TRUE.equals(requestDTO.getIsPublic()))
+                .build());
+
+        return collectionMapper.toResponseDTO(collection);
+    }
+
+    @Override
+    @Transactional
+    public CollectionResponseDTO updateCollection(Long collectionId, UpdateCollectionRequestDTO requestDTO) {
+        User user = getCurrentUserOrThrow();
+        VideoCollection collection = getOwnedCollectionOrThrow(collectionId, user.getId());
+        String name = requestDTO.getName().trim();
+
+        if (videoCollectionRepository.existsByUserIdAndNameIgnoreCaseAndIdNot(user.getId(), name, collectionId)) {
+            throw new AppException(ErrorCode.COLLECTION_ALREADY_EXISTS, "name");
+        }
+
+        collection.setName(name);
+        collection.setDescription(normalizeDescription(requestDTO.getDescription()));
+        if (requestDTO.getIsPublic() != null) {
+            collection.setIsPublic(requestDTO.getIsPublic());
+        }
+
+        return collectionMapper.toResponseDTO(videoCollectionRepository.save(collection));
+    }
+
+    @Override
+    @Transactional
+    public void deleteCollection(Long collectionId) {
+        User user = getCurrentUserOrThrow();
+        VideoCollection collection = getOwnedCollectionOrThrow(collectionId, user.getId());
+
+        collectionVideoRepository.deleteByCollectionId(collection.getId());
+        videoCollectionRepository.delete(collection);
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public Page<VideoResponseDTO> getCollectionVideos(Long collectionId, Pageable pageable) {
+        User user = getCurrentUserOrThrow();
+        VideoCollection collection = getOwnedCollectionOrThrow(collectionId, user.getId());
+
+        return collectionVideoRepository.findVisibleByCollectionIdOrderByAddedAtDesc(collection.getId(), user.getId(), pageable)
+                .map(collectionVideo -> mapToVideoResponseDTO(collectionVideo.getVideo(), true));
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public Page<VideoResponseDTO> getUserCollectionVideos(String username, Long collectionId, Pageable pageable) {
+        VideoCollection collection = getCollectionForProfileOrThrow(username, collectionId);
+        User currentUser = getCurrentUserOrNull();
+        return collectionVideoRepository.findVisibleByCollectionIdForViewerOrderByAddedAtDesc(
+                        collection.getId(),
+                        collection.getUser().getId(),
+                        currentUser == null ? null : currentUser.getId(),
+                        pageable)
+                .map(collectionVideo -> mapToVideoResponseDTO(
+                        collectionVideo.getVideo(),
+                        currentUser != null && savedVideoRepository.existsByUserIdAndVideoId(
+                                currentUser.getId(),
+                                collectionVideo.getVideo().getId())));
+    }
+
+    @Override
+    @Transactional
+    public VideoResponseDTO addVideoToCollection(Long collectionId, Long videoId) {
+        User user = getCurrentUserOrThrow();
+        VideoCollection collection = getOwnedCollectionOrThrow(collectionId, user.getId());
+        Video video = getVideoOrThrow(videoId);
+        userBlockService.assertNotBlockedEitherWay(user, video.getUser());
+
+        saveVideo(videoId);
+
+        if (!collectionVideoRepository.existsByCollectionIdAndVideoId(collection.getId(), videoId)) {
+            collectionVideoRepository.save(CollectionVideo.builder()
+                    .collection(collection)
+                    .video(video)
+                    .build());
+        }
+
+        return mapToVideoResponseDTO(video, true);
+    }
+
+    @Override
+    @Transactional
+    public void removeVideoFromCollection(Long collectionId, Long videoId) {
+        User user = getCurrentUserOrThrow();
+        VideoCollection collection = getOwnedCollectionOrThrow(collectionId, user.getId());
+
+        collectionVideoRepository.findByCollectionIdAndVideoId(collection.getId(), videoId)
+                .ifPresent(collectionVideoRepository::delete);
+    }
+
+    private Video getVideoOrThrow(Long videoId) {
+        return videoRepository.findById(videoId)
+                .orElseThrow(() -> new AppException(ErrorCode.VIDEO_NOT_FOUND));
+    }
+
+    private VideoCollection getOwnedCollectionOrThrow(Long collectionId, Long userId) {
+        return videoCollectionRepository.findByIdAndUserId(collectionId, userId)
+                .orElseThrow(() -> new AppException(ErrorCode.COLLECTION_NOT_FOUND));
+    }
+
+    private VideoCollection getCollectionForProfileOrThrow(String username, Long collectionId) {
+        VideoCollection collection = videoCollectionRepository.findByIdAndUserUsernameIgnoreCase(collectionId, username)
+                .orElseThrow(() -> new AppException(ErrorCode.COLLECTION_NOT_FOUND));
+
+        User currentUser = getCurrentUserOrNull();
+        User owner = collection.getUser();
+        assertCanViewOwner(currentUser, owner);
+
+        boolean isOwner = currentUser != null && currentUser.getId().equals(owner.getId());
+        if (!isOwner && !Boolean.TRUE.equals(collection.getIsPublic())) {
+            throw new AppException(ErrorCode.COLLECTION_ACCESS_DENIED);
+        }
+
+        return collection;
+    }
+
+    private void assertCanViewOwner(User currentUser, User owner) {
+        if (currentUser != null) {
+            userBlockService.assertNotBlockedEitherWay(currentUser, owner);
+        }
+    }
+
+    private User getCurrentUserOrNull() {
+        Authentication authentication = SecurityContextHolder.getContext().getAuthentication();
+        if (authentication == null || !authentication.isAuthenticated() || authentication.getName().equals("anonymousUser")) {
+            return null;
+        }
+
+        String email;
+        if (authentication instanceof OAuth2AuthenticationToken oauthToken) {
+            email = oauthToken.getPrincipal().getAttribute("email");
+        } else {
+            email = authentication.getName();
+        }
+
+        return userRepo.findByEmail(email)
+                .orElseThrow(() -> new AppException(ErrorCode.EMAIL_NOT_FOUND));
+    }
+
+    private User getCurrentUserOrThrow() {
+        Authentication authentication = SecurityContextHolder.getContext().getAuthentication();
+        if (authentication == null || !authentication.isAuthenticated() || authentication.getName().equals("anonymousUser")) {
+            throw new AppException(ErrorCode.UNAUTHORIZED);
+        }
+
+        String email;
+        if (authentication instanceof OAuth2AuthenticationToken oauthToken) {
+            email = oauthToken.getPrincipal().getAttribute("email");
+        } else {
+            email = authentication.getName();
+        }
+
+        return userRepo.findByEmail(email)
+                .orElseThrow(() -> new AppException(ErrorCode.EMAIL_NOT_FOUND));
+    }
+
+    private String normalizeDescription(String description) {
+        if (description == null || description.isBlank()) {
+            return null;
+        }
+        return description.trim();
+    }
+
+    private VideoResponseDTO mapToVideoResponseDTO(Video video, boolean isSaved) {
+        return VideoResponseDTO.builder()
+                .id(video.getId())
+                .title(video.getTitle())
+                .description(video.getDescription())
+                .fileUrl(video.getFileUrl())
+                .thumbnailUrl(video.getThumbnailUrl())
+                .duration(video.getDuration())
+                .category(video.getCategory())
+                .viewCount(video.getViewCount())
+                .likeCount(video.getLikeCount())
+                .commentCount(video.getCommentCount())
+                .saveCount(getSaveCount(video))
+                .userId(video.getUser().getId())
+                .username(video.getUser().getUsername())
+                .userNickname(video.getUser().getNickname())
+                .userAvatarUrl(video.getUser().getAvatarUrl())
+                .createdAt(video.getCreatedAt())
+                .isSaved(isSaved)
+                .build();
+    }
+
+    private Long getSaveCount(Video video) {
+        return video.getSaveCount() == null ? 0L : video.getSaveCount();
+    }
+}

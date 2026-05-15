@@ -8,6 +8,10 @@ import lombok.RequiredArgsConstructor;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.PageRequest;
+import org.springframework.data.domain.Pageable;
+import com.back.common.model.dto.response.Meta;
 import java.time.LocalDateTime;
 import java.util.List;
 
@@ -39,13 +43,19 @@ public class FollowController {
     }
 
     @GetMapping("/following")
-    public ResponseEntity<ApiResponse<List<UserInfo>>> getFollowingList() {
-        List<UserInfo> data = followService.getFollowingList();
+    public ResponseEntity<ApiResponse<List<UserInfo>>> getFollowingList(
+            @RequestParam(defaultValue = "0") int page,
+            @RequestParam(defaultValue = "10") int size) {
+        Pageable pageable = PageRequest.of(page, size);
+        Page<UserInfo> followPage = followService.getFollowingList(pageable);
+        
         return ResponseEntity.ok(ApiResponse.<List<UserInfo>>builder()
                 .message(Translator.toLocale("follow.list.success", "Following list retrieved successfully"))
-                .data(data)
+                .data(followPage.getContent())
+                .meta(Meta.from(followPage))
                 .status(HttpStatus.OK.value())
                 .timestamp(LocalDateTime.now())
                 .build());
     }
 }
+

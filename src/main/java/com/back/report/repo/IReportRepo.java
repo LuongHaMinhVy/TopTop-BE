@@ -9,7 +9,7 @@ import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.stereotype.Repository;
 
 @Repository
-public interface IReportRepository extends JpaRepository<Report, Long> {
+public interface IReportRepo extends JpaRepository<Report, Long> {
 
     boolean existsByReporterIdAndTargetTypeAndTargetIdAndReasonId(
         Long reporterId,

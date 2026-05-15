@@ -22,9 +22,11 @@ public class VideoResponseDTO {
     private Long viewCount;
     private Long likeCount;
     private Long commentCount;
+    private Long saveCount;
     private Long userId;
     private String username;
     private String userNickname;
     private String userAvatarUrl;
     private LocalDateTime createdAt;
+    private Boolean isSaved;
 }

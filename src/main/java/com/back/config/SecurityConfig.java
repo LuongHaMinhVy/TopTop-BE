@@ -64,7 +64,11 @@ public class SecurityConfig {
                         ).permitAll()
 
                         .requestMatchers(HttpMethod.GET, "/api/v1/users/me").authenticated()
+                        .requestMatchers(HttpMethod.GET, "/api/v1/users/*/collections").permitAll()
+                        .requestMatchers(HttpMethod.GET, "/api/v1/users/*/collections/**").permitAll()
                         .requestMatchers(HttpMethod.GET, "/api/v1/users/*").permitAll()
+                        .requestMatchers("/api/v1/blocks/**")
+                        .hasAnyAuthority(RoleName.ROLE_USER.name(), RoleName.ROLE_ADMIN.name())
 
                         .requestMatchers(HttpMethod.OPTIONS, "/**").permitAll()
 
@@ -72,9 +76,14 @@ public class SecurityConfig {
                         .requestMatchers(HttpMethod.GET, "/api/v1/videos").permitAll()
                         .requestMatchers(HttpMethod.GET, "/api/v1/videos/{id}").permitAll()
                         .requestMatchers(HttpMethod.GET, "/api/v1/videos/user/{userId}").permitAll()
+                        .requestMatchers(HttpMethod.GET, "/api/v1/videos/@{username}/{videoId}").permitAll()
                         .requestMatchers(HttpMethod.POST, "/api/v1/videos/**")
                         .hasAnyAuthority(RoleName.ROLE_USER.name(), RoleName.ROLE_ADMIN.name())
                         .requestMatchers(HttpMethod.DELETE, "/api/v1/videos/**")
+                        .hasAnyAuthority(RoleName.ROLE_USER.name(), RoleName.ROLE_ADMIN.name())
+
+                        // ── Collection endpoints ─────────────────────────────────
+                        .requestMatchers("/api/v1/collections/**")
                         .hasAnyAuthority(RoleName.ROLE_USER.name(), RoleName.ROLE_ADMIN.name())
 
                         // ── Track endpoints ──────────────────────────────────────

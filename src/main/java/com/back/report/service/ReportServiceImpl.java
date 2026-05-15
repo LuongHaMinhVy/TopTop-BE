@@ -1,5 +1,7 @@
 package com.back.report.service;
 
+import com.back.block.service.IUserBlockService;
+import com.back.comment.model.entity.Comment;
 import com.back.comment.repo.ICommentRepo;
 import com.back.common.utils.exception.AppException;
 import com.back.common.utils.exception.ErrorCode;
@@ -13,10 +15,11 @@ import com.back.report.model.dto.response.ReportReasonTreeResponseDTO;
 import com.back.report.model.dto.response.ReportResponseDTO;
 import com.back.report.model.entity.Report;
 import com.back.report.model.entity.ReportReason;
-import com.back.report.repo.IReportReasonRepository;
-import com.back.report.repo.IReportRepository;
+import com.back.report.repo.IReportReasonRepo;
+import com.back.report.repo.IReportRepo;
 import com.back.user.model.entity.User;
 import com.back.user.repo.IUserRepo;
+import com.back.video.model.entity.Video;
 import com.back.video.repo.IVideoRepository;
 import lombok.RequiredArgsConstructor;
 import org.springframework.security.core.context.SecurityContextHolder;
@@ -31,13 +34,14 @@ import java.util.stream.Collectors;
 @RequiredArgsConstructor
 public class ReportServiceImpl implements IReportService {
 
-    private final IReportReasonRepository reasonRepository;
-    private final IReportRepository reportRepository;
+    private final IReportReasonRepo reasonRepository;
+    private final IReportRepo reportRepository;
     private final ReportMapper reportMapper;
     
     private final IUserRepo userRepo;
     private final IVideoRepository videoRepository;
     private final ICommentRepo commentRepository;
+    private final IUserBlockService userBlockService;
 
     @Override
     public List<ReportReasonTreeResponseDTO> getReportReasonTree() {
@@ -78,7 +82,7 @@ public class ReportServiceImpl implements IReportService {
                 .orElseGet(() -> userRepo.findByUsername(currentEmailOrUsername)
                 .orElseThrow(() -> new AppException(ErrorCode.USER_NOT_FOUND)));
 
-        validateTargetExists(requestDTO.getTargetType(), requestDTO.getTargetId());
+        validateTargetAccessible(currentUser, requestDTO.getTargetType(), requestDTO.getTargetId());
 
         ReportReason reason = reasonRepository.findByIdAndActiveTrue(requestDTO.getReasonId())
                 .orElseThrow(() -> new AppException(ErrorCode.REPORT_REASON_NOT_FOUND));
@@ -105,22 +109,22 @@ public class ReportServiceImpl implements IReportService {
         return reportMapper.toResponseDTO(reportRepository.save(report));
     }
 
-    private void validateTargetExists(ReportTargetType targetType, Long targetId) {
+    private void validateTargetAccessible(User currentUser, ReportTargetType targetType, Long targetId) {
         switch (targetType) {
             case VIDEO:
-                if (!videoRepository.existsById(targetId)) {
-                    throw new AppException(ErrorCode.VIDEO_NOT_FOUND);
-                }
+                Video video = videoRepository.findById(targetId)
+                        .orElseThrow(() -> new AppException(ErrorCode.VIDEO_NOT_FOUND));
+                userBlockService.assertNotBlockedEitherWay(currentUser, video.getUser());
                 break;
             case COMMENT:
-                if (!commentRepository.existsById(targetId)) {
-                    throw new AppException(ErrorCode.COMMENT_NOT_FOUND);
-                }
+                Comment comment = commentRepository.findById(targetId)
+                        .orElseThrow(() -> new AppException(ErrorCode.COMMENT_NOT_FOUND));
+                userBlockService.assertNotBlockedEitherWay(currentUser, comment.getUser());
                 break;
             case USER:
-                if (!userRepo.existsById(targetId)) {
-                    throw new AppException(ErrorCode.USER_NOT_FOUND);
-                }
+                User targetUser = userRepo.findById(targetId)
+                        .orElseThrow(() -> new AppException(ErrorCode.USER_NOT_FOUND));
+                userBlockService.assertNotBlockedEitherWay(currentUser, targetUser);
                 break;
             default:
                 break;

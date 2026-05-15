@@ -27,6 +27,7 @@ public enum ErrorCode {
     ACCOUNT_LOCKED(HttpStatus.FORBIDDEN, "Account is locked. Please contact support for assistance"),
     TOO_MANY_REQUESTS(HttpStatus.TOO_MANY_REQUESTS, "Too many requests. Please try again later"),
     ROLE_NOT_FOUND(HttpStatus.INTERNAL_SERVER_ERROR, "Default role not found. Please contact support"),
+    BAD_REQUEST(HttpStatus.BAD_REQUEST, "Bad request"),
     UNAUTHORIZED(HttpStatus.UNAUTHORIZED, "Unauthorized"),
 
     ACCOUNT_BANNED(HttpStatus.FORBIDDEN, "Account has been banned. Please contact support for assistance"),
@@ -56,6 +57,8 @@ public enum ErrorCode {
 
     COPYRIGHT_DETECTED(HttpStatus.BAD_REQUEST, "Upload rejected: Copyrighted material detected."),
     CANNOT_FOLLOW_SELF(HttpStatus.BAD_REQUEST, "You cannot follow yourself"),
+    CANNOT_BLOCK_SELF(HttpStatus.BAD_REQUEST, "You cannot block yourself"),
+    USER_BLOCKED(HttpStatus.FORBIDDEN, "Video is unavailable"),
     ADMIN_LOGIN_NOT_ALLOWED(HttpStatus.FORBIDDEN, "Admin accounts are not allowed to log in to the user application"),
     USER_LOGIN_NOT_ALLOWED(HttpStatus.FORBIDDEN, "Only admin accounts can log in to the admin portal"),
     
@@ -66,6 +69,9 @@ public enum ErrorCode {
     REPORT_RATE_LIMIT_EXCEEDED(HttpStatus.TOO_MANY_REQUESTS, "You have submitted too many reports recently. Please try again later"),
     VIDEO_NOT_FOUND(HttpStatus.NOT_FOUND, "Video not found"),
     COMMENT_NOT_FOUND(HttpStatus.NOT_FOUND, "Comment not found"),
+    COLLECTION_NOT_FOUND(HttpStatus.NOT_FOUND, "Collection not found"),
+    COLLECTION_ALREADY_EXISTS(HttpStatus.CONFLICT, "Collection already exists"),
+    COLLECTION_ACCESS_DENIED(HttpStatus.FORBIDDEN, "You do not have permission to access this collection"),
     
     INTERNAL_ERROR(HttpStatus.INTERNAL_SERVER_ERROR, "Internal server error");
     private final HttpStatus status;

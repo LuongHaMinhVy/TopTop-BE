@@ -2,6 +2,7 @@ package com.back.follow.service;
 
 import com.back.common.utils.exception.AppException;
 import com.back.common.utils.exception.ErrorCode;
+import com.back.block.repo.IUserBlockRepo;
 import com.back.follow.model.entity.Follow;
 import com.back.follow.repo.IFollowRepo;
 import com.back.user.model.dto.response.RelationshipStatus;
@@ -13,6 +14,8 @@ import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.security.oauth2.client.authentication.OAuth2AuthenticationToken;
 import com.back.user.mapper.UserInfoMapper;
 import com.back.user.model.dto.response.UserInfo;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
 import java.util.List;
 import java.util.stream.Collectors;
 import org.springframework.stereotype.Service;
@@ -24,6 +27,7 @@ public class FollowServiceImpl implements IFollowService {
 
     private final IFollowRepo followRepo;
     private final IUserRepo userRepo;
+    private final IUserBlockRepo userBlockRepo;
 
     private User getCurrentUser() {
         Authentication authentication = SecurityContextHolder.getContext().getAuthentication();
@@ -53,6 +57,11 @@ public class FollowServiceImpl implements IFollowService {
 
         if (currentUser.equals(targetUser)) {
             throw new AppException(ErrorCode.CANNOT_FOLLOW_SELF);
+        }
+
+        if (userBlockRepo.existsByBlockerAndBlocked(currentUser, targetUser)
+                || userBlockRepo.existsByBlockerAndBlocked(targetUser, currentUser)) {
+            throw new AppException(ErrorCode.USER_BLOCKED);
         }
 
         if (followRepo.existsByFollowerAndFollowing(currentUser, targetUser)) {
@@ -98,21 +107,24 @@ public class FollowServiceImpl implements IFollowService {
 
         boolean isFollowing = followRepo.existsByFollowerAndFollowing(currentUser, targetUser);
         boolean isFollower = followRepo.existsByFollowerAndFollowing(targetUser, currentUser);
+        boolean isBlocked = userBlockRepo.existsByBlockerAndBlocked(currentUser, targetUser);
+        boolean isBlockedBy = userBlockRepo.existsByBlockerAndBlocked(targetUser, currentUser);
 
         return RelationshipStatus.builder()
                 .isFollowing(isFollowing)
                 .isFollower(isFollower)
+                .isBlocked(isBlocked)
+                .isBlockedBy(isBlockedBy)
                 .isFriend(isFollowing && isFollower)
                 .build();
     }
 
     @Override
-    public List<UserInfo> getFollowingList() {
+    public Page<UserInfo> getFollowingList(Pageable pageable) {
         User currentUser = getCurrentUser();
-        if (currentUser == null) return List.of();
+        if (currentUser == null) return Page.empty();
 
-        return followRepo.findByFollower(currentUser).stream()
-                .map(follow -> UserInfoMapper.buildUserInfo(follow.getFollowing()))
-                .collect(Collectors.toList());
+        return followRepo.findByFollower(currentUser, pageable)
+                .map(follow -> UserInfoMapper.buildUserInfo(follow.getFollowing()));
     }
 }

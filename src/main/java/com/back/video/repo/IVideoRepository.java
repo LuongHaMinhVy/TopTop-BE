@@ -9,6 +9,7 @@ import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 
 import org.springframework.data.jpa.repository.EntityGraph;
+import org.springframework.data.repository.query.Param;
 import java.time.LocalDateTime;
 import java.util.List;
 
@@ -19,7 +20,39 @@ public interface IVideoRepository extends JpaRepository<Video, Long> {
     Page<Video> findAll(Pageable pageable);
 
     @EntityGraph(attributePaths = {"user"})
+    @Query("""
+            SELECT v FROM Video v
+            WHERE :viewerId IS NULL
+               OR v.user.id = :viewerId
+               OR NOT EXISTS (
+                    SELECT b.id FROM UserBlock b
+                    WHERE (b.blocker.id = :viewerId AND b.blocked = v.user)
+                       OR (b.blocked.id = :viewerId AND b.blocker = v.user)
+               )
+            """)
+    Page<Video> findAllVisibleForViewer(@Param("viewerId") Long viewerId, Pageable pageable);
+
+    @EntityGraph(attributePaths = {"user"})
     Page<Video> findByUserId(Long userId, Pageable pageable);
+
+    @EntityGraph(attributePaths = {"user"})
+    @Query("""
+            SELECT v FROM Video v
+            WHERE v.user.id = :userId
+              AND (
+                    :viewerId IS NULL
+                    OR v.user.id = :viewerId
+                    OR NOT EXISTS (
+                        SELECT b.id FROM UserBlock b
+                        WHERE (b.blocker.id = :viewerId AND b.blocked = v.user)
+                           OR (b.blocked.id = :viewerId AND b.blocker = v.user)
+                    )
+              )
+            """)
+    Page<Video> findByUserIdVisibleForViewer(
+            @Param("userId") Long userId,
+            @Param("viewerId") Long viewerId,
+            Pageable pageable);
 
     @Query("SELECT v FROM Video v WHERE v.deletedAt < :cutoff")
     List<Video> findExpiredVideos(LocalDateTime cutoff);

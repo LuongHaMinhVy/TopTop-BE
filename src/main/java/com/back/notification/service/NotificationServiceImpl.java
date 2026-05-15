@@ -13,6 +13,8 @@ import org.springframework.security.core.Authentication;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
 import java.util.List;
 import java.util.stream.Collectors;
 
@@ -39,12 +41,12 @@ public class NotificationServiceImpl implements INotificationService {
     }
 
     @Override
-    public List<NotificationResponseDTO> getNotifications() {
+    public Page<NotificationResponseDTO> getNotifications(Pageable pageable) {
         User user = getCurrentUser();
-        return notificationRepo.findByRecipientWithDetails(user).stream()
-                .map(this::mapToResponseDTO)
-                .collect(Collectors.toList());
+        return notificationRepo.findByRecipientWithDetails(user, pageable)
+                .map(this::mapToResponseDTO);
     }
+
 
     @Override
     @Transactional

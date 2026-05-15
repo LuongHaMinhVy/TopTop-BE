@@ -72,6 +72,9 @@ public class UserServiceImpl implements IUserService {
 
         User currentUser = getCurrentUser();
         RelationshipStatus relationship = followService.getRelationshipStatus(currentUser, targetUser);
+        if (relationship != null && Boolean.TRUE.equals(relationship.getIsBlockedBy())) {
+            throw new AppException(ErrorCode.USER_BLOCKED);
+        }
 
         return UserInfoMapper.buildUserInfo(targetUser, relationship);
     }

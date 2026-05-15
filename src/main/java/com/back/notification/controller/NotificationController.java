@@ -7,7 +7,12 @@ import com.back.notification.service.INotificationService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.PageRequest;
+import org.springframework.data.domain.Pageable;
+import com.back.common.model.dto.response.Meta;
 import org.springframework.web.bind.annotation.*;
+
 import java.time.LocalDateTime;
 import java.util.List;
 
@@ -18,15 +23,21 @@ public class NotificationController {
     private final INotificationService notificationService;
 
     @GetMapping
-    public ResponseEntity<ApiResponse<List<NotificationResponseDTO>>> getNotifications() {
-        List<NotificationResponseDTO> data = notificationService.getNotifications();
+    public ResponseEntity<ApiResponse<List<NotificationResponseDTO>>> getNotifications(
+            @RequestParam(defaultValue = "0") int page,
+            @RequestParam(defaultValue = "10") int size) {
+        Pageable pageable = PageRequest.of(page, size);
+        Page<NotificationResponseDTO> notificationPage = notificationService.getNotifications(pageable);
+        
         return ResponseEntity.ok(ApiResponse.<List<NotificationResponseDTO>>builder()
                 .message(Translator.toLocale("notification.list.success", "Notifications retrieved successfully"))
-                .data(data)
+                .data(notificationPage.getContent())
+                .meta(Meta.from(notificationPage))
                 .status(HttpStatus.OK.value())
                 .timestamp(LocalDateTime.now())
                 .build());
     }
+
 
     @GetMapping("/unread-count")
     public ResponseEntity<ApiResponse<Long>> getUnreadCount() {
