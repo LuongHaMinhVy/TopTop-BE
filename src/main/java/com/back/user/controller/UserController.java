@@ -47,4 +47,24 @@ public class UserController{
                 .status(HttpStatus.OK.value())
                 .build());
     }
+
+    @org.springframework.web.bind.annotation.PutMapping("/profile")
+    public ResponseEntity<ApiResponse<UserInfo>> updateProfile(@jakarta.validation.Valid @org.springframework.web.bind.annotation.RequestBody com.back.user.model.dto.request.UpdateProfileRequestDTO request) {
+        UserInfo userInfo = userService.updateProfile(request);
+        return ResponseEntity.ok(ApiResponse.<UserInfo>builder()
+                .message("Profile updated successfully")
+                .data(userInfo)
+                .status(HttpStatus.OK.value())
+                .build());
+    }
+
+    @org.springframework.web.bind.annotation.PostMapping("/avatar")
+    public ResponseEntity<ApiResponse<String>> uploadAvatar(@org.springframework.web.bind.annotation.RequestParam("file") org.springframework.web.multipart.MultipartFile file) throws java.io.IOException {
+        String avatarUrl = userService.uploadAvatar(file);
+        return ResponseEntity.ok(ApiResponse.<String>builder()
+                .message("Avatar uploaded successfully")
+                .data(avatarUrl)
+                .status(HttpStatus.OK.value())
+                .build());
+    }
 }

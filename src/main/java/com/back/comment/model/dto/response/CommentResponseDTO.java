@@ -18,5 +18,13 @@ public class CommentResponseDTO {
     private String userAvatarUrl;
     private Long videoId;
     private Long parentId;
+    private Integer timestampInVideo;
+    private CommentAuthorResponseDTO author;
+    private Long likeCount;
+    private Long replyCount;
+    private Boolean liked;
+    private Boolean canDelete;
+    private Boolean deleted;
     private LocalDateTime createdAt;
+    private LocalDateTime updatedAt;
 }

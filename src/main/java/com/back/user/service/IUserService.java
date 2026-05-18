@@ -1,6 +1,7 @@
 package com.back.user.service;
 
 import com.back.user.model.dto.response.UserInfo;
+import com.back.user.model.dto.request.UpdateProfileRequestDTO;
 
 import java.util.List;
 
@@ -11,4 +12,7 @@ public interface IUserService {
     UserInfo getUserInfo(HttpServletRequest request);
     UserInfo getUserProfile(String username);
     List<MentionSuggestionResponseDTO> getMentionSuggestions(String keyword);
+    UserInfo updateProfile(UpdateProfileRequestDTO request);
+    String uploadAvatar(org.springframework.web.multipart.MultipartFile file) throws java.io.IOException;
 }
+

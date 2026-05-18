@@ -10,8 +10,11 @@ import com.back.common.utils.exception.ErrorCode;
 import com.back.user.model.entity.User;
 import com.back.user.repo.IUserRepo;
 import com.back.video.model.dto.request.VideoResponseDTO;
+import com.back.video.model.dto.response.VideoStatsResponseDTO;
 import com.back.video.model.dto.response.VideoUploadRequestDTO;
 import com.back.video.model.entity.Video;
+import com.back.video.model.entity.VideoLike;
+import com.back.video.repo.IVideoLikeRepository;
 import com.back.video.repo.IVideoRepository;
 import com.back.hashtag.repo.IHashtagRepository;
 import com.back.hashtag.model.entity.Hashtag;
@@ -43,6 +46,7 @@ import java.util.regex.Pattern;
 public class VideoServiceImpl implements IVideoService {
 
     private final IVideoRepository videoRepository;
+    private final IVideoLikeRepository videoLikeRepository;
     private final IUserRepo userRepo;
     private final R2StorageService storageService;
     private final IHashtagRepository hashtagRepo;
@@ -54,6 +58,10 @@ public class VideoServiceImpl implements IVideoService {
         User user = getCurrentUser();
         if (user == null) {
             throw new AppException(ErrorCode.UNAUTHORIZED);
+        }
+
+        if (requestDTO.getTitle() == null || requestDTO.getTitle().trim().isEmpty()) {
+            throw new AppException(ErrorCode.BAD_REQUEST);
         }
 
         validateVideo(file);
@@ -153,22 +161,35 @@ public class VideoServiceImpl implements IVideoService {
                 .orElseThrow(() -> new AppException(ErrorCode.FILE_NOT_FOUND));
         userBlockService.assertNotBlockedEitherWay(getCurrentUser(), video.getUser());
         log.info("Video {} reported for reason: {}", id, reason);
-        // In a real app, we would save this to a Report entity
     }
 
     private final INotificationService notificationService;
 
     @Override
-    public void likeVideo(Long id) {
-        Video video = videoRepository.findById(id)
-                .orElseThrow(() -> new AppException(ErrorCode.FILE_NOT_FOUND));
-        
+    public VideoStatsResponseDTO likeVideo(Long id) {
         User currentUser = getCurrentUser();
+        if (currentUser == null) {
+            throw new AppException(ErrorCode.UNAUTHORIZED);
+        }
+
+        Video video = videoRepository.findById(id)
+                .orElseThrow(() -> new AppException(ErrorCode.VIDEO_NOT_FOUND));
         userBlockService.assertNotBlockedEitherWay(currentUser, video.getUser());
-        video.setLikeCount(video.getLikeCount() + 1);
+
+        if (videoLikeRepository.existsByUserIdAndVideoId(currentUser.getId(), id)) {
+            return mapToStatsDTO(video, true);
+        }
+
+        VideoLike like = VideoLike.builder()
+                .user(currentUser)
+                .video(video)
+                .build();
+        videoLikeRepository.save(like);
+
+        video.setLikeCount(safe(video.getLikeCount()) + 1);
         videoRepository.save(video);
 
-        if (currentUser != null) {
+        if (!video.getUser().getId().equals(currentUser.getId())) {
             notificationService.createNotification(
                     video.getUser(),
                     currentUser,
@@ -177,17 +198,28 @@ public class VideoServiceImpl implements IVideoService {
                     currentUser.getUsername() + " liked your video: " + video.getTitle()
             );
         }
+
+        return mapToStatsDTO(video, true);
     }
 
     @Override
-    public void unlikeVideo(Long id) {
-        Video video = videoRepository.findById(id)
-                .orElseThrow(() -> new AppException(ErrorCode.FILE_NOT_FOUND));
-        userBlockService.assertNotBlockedEitherWay(getCurrentUser(), video.getUser());
-        if (video.getLikeCount() > 0) {
-            video.setLikeCount(video.getLikeCount() - 1);
-            videoRepository.save(video);
+    public VideoStatsResponseDTO unlikeVideo(Long id) {
+        User currentUser = getCurrentUser();
+        if (currentUser == null) {
+            throw new AppException(ErrorCode.UNAUTHORIZED);
         }
+
+        Video video = videoRepository.findById(id)
+                .orElseThrow(() -> new AppException(ErrorCode.VIDEO_NOT_FOUND));
+        userBlockService.assertNotBlockedEitherWay(currentUser, video.getUser());
+
+        videoLikeRepository.findByUserIdAndVideoId(currentUser.getId(), id).ifPresent(like -> {
+            videoLikeRepository.delete(like);
+            video.setLikeCount(Math.max(0L, safe(video.getLikeCount()) - 1));
+            videoRepository.save(video);
+        });
+
+        return mapToStatsDTO(video, false);
     }
 
     @Override
@@ -280,6 +312,7 @@ public class VideoServiceImpl implements IVideoService {
     private VideoResponseDTO mapToResponseDTO(Video video) {
         User currentUser = getCurrentUser();
         boolean isSaved = currentUser != null && savedVideoRepository.existsByUserIdAndVideoId(currentUser.getId(), video.getId());
+        boolean isLiked = currentUser != null && videoLikeRepository.existsByUserIdAndVideoId(currentUser.getId(), video.getId());
 
         return VideoResponseDTO.builder()
                 .id(video.getId())
@@ -299,6 +332,57 @@ public class VideoServiceImpl implements IVideoService {
                 .userAvatarUrl(video.getUser().getAvatarUrl())
                 .createdAt(video.getCreatedAt())
                 .isSaved(isSaved)
+                .isLiked(isLiked)
+                .allowComments(video.getAllowComments())
+                .visibility(video.getVisibility() != null ? video.getVisibility().name() : "PUBLIC")
                 .build();
+    }
+
+    private VideoStatsResponseDTO mapToStatsDTO(Video video, boolean liked) {
+        return VideoStatsResponseDTO.builder()
+                .videoId(video.getId())
+                .liked(liked)
+                .likeCount(safe(video.getLikeCount()))
+                .commentCount(safe(video.getCommentCount()))
+                .saveCount(safe(video.getSaveCount()))
+                .shareCount(0L)
+                .build();
+    }
+
+    private long safe(Long value) {
+        return value == null ? 0L : value;
+    }
+
+    @Override
+    public VideoResponseDTO updateVideo(Long id, VideoUploadRequestDTO requestDTO) {
+        Video video = videoRepository.findById(id)
+                .orElseThrow(() -> new AppException(ErrorCode.FILE_NOT_FOUND));
+
+        User currentUser = getCurrentUser();
+        if (currentUser == null || !video.getUser().getId().equals(currentUser.getId())) {
+            throw new AppException(ErrorCode.UNAUTHORIZED);
+        }
+
+        if (requestDTO.getTitle() != null) {
+            video.setTitle(requestDTO.getTitle());
+        }
+        if (requestDTO.getDescription() != null) {
+            video.setDescription(requestDTO.getDescription());
+        }
+        if (requestDTO.getCategory() != null) {
+            video.setCategory(requestDTO.getCategory());
+        }
+        if (requestDTO.getVisibility() != null) {
+            video.setVisibility(VideoVisibility.valueOf(requestDTO.getVisibility()));
+        }
+        if (requestDTO.getAllowComments() != null) {
+            video.setAllowComments(requestDTO.getAllowComments());
+        }
+        if (requestDTO.getAllowEdit() != null) {
+            video.setAllowEdit(requestDTO.getAllowEdit());
+        }
+
+        video = videoRepository.save(video);
+        return mapToResponseDTO(video);
     }
 }

@@ -17,6 +17,9 @@ import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.security.oauth2.client.authentication.OAuth2AuthenticationToken;
 import org.springframework.stereotype.Service;
 
+import com.back.common.service.R2StorageService;
+import org.springframework.web.multipart.MultipartFile;
+
 import jakarta.servlet.http.HttpServletRequest;
 
 import java.util.List;
@@ -27,6 +30,7 @@ import java.util.List;
 public class UserServiceImpl implements IUserService {
     private final IUserRepo userRepo;
     private final IFollowService followService;
+    private final R2StorageService storageService;
 
     private User getCurrentUser() {
         Authentication authentication = SecurityContextHolder.getContext().getAuthentication();
@@ -96,5 +100,60 @@ public class UserServiceImpl implements IUserService {
                 .avatarUrl(u.getAvatarUrl())
                 .verified(u.getVerified())
                 .build()).collect(java.util.stream.Collectors.toList());
+    }
+
+    @Override
+    @org.springframework.cache.annotation.CacheEvict(value = "userInfo", key = "#result.email")
+    public UserInfo updateProfile(com.back.user.model.dto.request.UpdateProfileRequestDTO request) {
+        User currentUser = getCurrentUser();
+        if (currentUser == null) {
+            throw new AppException(ErrorCode.UNAUTHORIZED);
+        }
+
+        // Validate username uniqueness if changed
+        if (!currentUser.getUsername().equals(request.getUsername())) {
+            if (userRepo.existsByUsername(request.getUsername())) {
+                throw new AppException(ErrorCode.USERNAME_ALREADY_EXISTS);
+            }
+            currentUser.setUsername(request.getUsername());
+        }
+
+        currentUser.setNickname(request.getNickname());
+        currentUser.setBio(request.getBio());
+        
+        if (request.getAvatarUrl() != null && !request.getAvatarUrl().trim().isEmpty()) {
+            currentUser.setAvatarUrl(request.getAvatarUrl());
+        }
+
+        User updatedUser = userRepo.save(currentUser);
+        log.info("Successfully updated profile for user: {}", updatedUser.getEmail());
+
+        return UserInfoMapper.buildUserInfo(updatedUser);
+    }
+
+    @Override
+    public String uploadAvatar(MultipartFile file) throws java.io.IOException {
+        User currentUser = getCurrentUser();
+        if (currentUser == null) {
+            throw new AppException(ErrorCode.UNAUTHORIZED);
+        }
+
+        if (file.isEmpty()) {
+            throw new AppException(ErrorCode.FILE_IS_REQUIRED);
+        }
+
+        String contentType = file.getContentType();
+        if (contentType == null || !contentType.startsWith("image/")) {
+            throw new AppException(ErrorCode.INVALID_IMAGE_FILE_TYPE);
+        }
+
+        String originalFilename = file.getOriginalFilename();
+        String ext = ".jpg";
+        if (originalFilename != null && originalFilename.lastIndexOf('.') != -1) {
+            ext = originalFilename.substring(originalFilename.lastIndexOf('.'));
+        }
+        
+        String key = "avatars/" + java.util.UUID.randomUUID() + ext;
+        return storageService.uploadFile(file, key);
     }
 }

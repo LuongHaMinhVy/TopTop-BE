@@ -1,6 +1,7 @@
 package com.back.video.service;
 
 import com.back.video.model.dto.request.VideoResponseDTO;
+import com.back.video.model.dto.response.VideoStatsResponseDTO;
 import com.back.video.model.dto.response.VideoUploadRequestDTO;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
@@ -15,7 +16,8 @@ public interface IVideoService {
     Page<VideoResponseDTO> getVideosByUserId(Long userId, Pageable pageable);
     void deleteVideo(Long id);
     void reportVideo(Long id, String reason);
-    void likeVideo(Long id);
-    void unlikeVideo(Long id);
+    VideoStatsResponseDTO likeVideo(Long id);
+    VideoStatsResponseDTO unlikeVideo(Long id);
     VideoResponseDTO getVideoByUsernameAndId(String username, Long videoId);
+    VideoResponseDTO updateVideo(Long id, VideoUploadRequestDTO requestDTO);
 }

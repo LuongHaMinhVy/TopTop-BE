@@ -3,6 +3,7 @@ package com.back.video.controller;
 import com.back.common.model.dto.response.ApiResponse;
 import com.back.common.utils.Translator;
 import com.back.video.model.dto.request.VideoResponseDTO;
+import com.back.video.model.dto.response.VideoStatsResponseDTO;
 import com.back.video.model.dto.response.VideoUploadRequestDTO;
 import com.back.video.service.IVideoService;
 import jakarta.validation.Valid;
@@ -109,20 +110,22 @@ public class VideoController {
     }
 
     @PostMapping("/{id}/like")
-    public ResponseEntity<ApiResponse<Void>> likeVideo(@PathVariable Long id) {
-        videoService.likeVideo(id);
-        return ResponseEntity.ok(ApiResponse.<Void>builder()
+    public ResponseEntity<ApiResponse<VideoStatsResponseDTO>> likeVideo(@PathVariable Long id) {
+        VideoStatsResponseDTO data = videoService.likeVideo(id);
+        return ResponseEntity.ok(ApiResponse.<VideoStatsResponseDTO>builder()
                 .message(Translator.toLocale("video.like.success", "Video liked successfully"))
+                .data(data)
                 .status(HttpStatus.OK.value())
                 .timestamp(LocalDateTime.now())
                 .build());
     }
 
     @DeleteMapping("/{id}/like")
-    public ResponseEntity<ApiResponse<Void>> unlikeVideo(@PathVariable Long id) {
-        videoService.unlikeVideo(id);
-        return ResponseEntity.ok(ApiResponse.<Void>builder()
+    public ResponseEntity<ApiResponse<VideoStatsResponseDTO>> unlikeVideo(@PathVariable Long id) {
+        VideoStatsResponseDTO data = videoService.unlikeVideo(id);
+        return ResponseEntity.ok(ApiResponse.<VideoStatsResponseDTO>builder()
                 .message(Translator.toLocale("video.unlike.success", "Video unliked successfully"))
+                .data(data)
                 .status(HttpStatus.OK.value())
                 .timestamp(LocalDateTime.now())
                 .build());
@@ -135,6 +138,19 @@ public class VideoController {
         VideoResponseDTO data = videoService.getVideoByUsernameAndId(username, videoId);
         return ResponseEntity.ok(ApiResponse.<VideoResponseDTO>builder()
                 .message(Translator.toLocale("video.retrieve.success", "Video retrieved successfully"))
+                .data(data)
+                .status(HttpStatus.OK.value())
+                .timestamp(LocalDateTime.now())
+                .build());
+    }
+
+    @PutMapping("/{id}")
+    public ResponseEntity<ApiResponse<VideoResponseDTO>> updateVideo(
+            @PathVariable Long id,
+            @RequestBody @Valid com.back.video.model.dto.response.VideoUploadRequestDTO requestDTO) {
+        VideoResponseDTO data = videoService.updateVideo(id, requestDTO);
+        return ResponseEntity.ok(ApiResponse.<VideoResponseDTO>builder()
+                .message("Video updated successfully")
                 .data(data)
                 .status(HttpStatus.OK.value())
                 .timestamp(LocalDateTime.now())

@@ -29,4 +29,7 @@ public class VideoResponseDTO {
     private String userAvatarUrl;
     private LocalDateTime createdAt;
     private Boolean isSaved;
+    private Boolean isLiked;
+    private Boolean allowComments;
+    private String visibility;
 }

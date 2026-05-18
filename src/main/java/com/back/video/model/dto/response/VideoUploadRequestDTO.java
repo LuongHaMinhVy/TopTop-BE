@@ -11,7 +11,6 @@ import lombok.NoArgsConstructor;
 @AllArgsConstructor
 @NoArgsConstructor
 public class VideoUploadRequestDTO {
-    @NotBlank(message = "Title is required")
     private String title;
     
     private String description;

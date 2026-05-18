@@ -77,10 +77,17 @@ public class SecurityConfig {
                         .requestMatchers(HttpMethod.GET, "/api/v1/videos/{id}").permitAll()
                         .requestMatchers(HttpMethod.GET, "/api/v1/videos/user/{userId}").permitAll()
                         .requestMatchers(HttpMethod.GET, "/api/v1/videos/@{username}/{videoId}").permitAll()
+                        .requestMatchers(HttpMethod.GET, "/api/v1/videos/{videoId}/comments").permitAll()
                         .requestMatchers(HttpMethod.POST, "/api/v1/videos/**")
                         .hasAnyAuthority(RoleName.ROLE_USER.name(), RoleName.ROLE_ADMIN.name())
                         .requestMatchers(HttpMethod.DELETE, "/api/v1/videos/**")
                         .hasAnyAuthority(RoleName.ROLE_USER.name(), RoleName.ROLE_ADMIN.name())
+
+                        // ── Comment endpoints ────────────────────────────────────
+                        .requestMatchers(HttpMethod.GET, "/api/v1/comments/video/{videoId}").permitAll()
+                        .requestMatchers(HttpMethod.GET, "/api/v1/comments/{id}/replies").permitAll()
+                        .requestMatchers("/api/v1/comments/**")
+                        .hasAnyAuthority(RoleName.ROLE_USER.name(), RoleName.ROLE_ADMIN.name(), RoleName.ROLE_MODERATOR.name())
 
                         // ── Collection endpoints ─────────────────────────────────
                         .requestMatchers("/api/v1/collections/**")
