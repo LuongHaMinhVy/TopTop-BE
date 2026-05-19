@@ -30,6 +30,9 @@ public class VideoResponseDTO {
     private LocalDateTime createdAt;
     private Boolean isSaved;
     private Boolean isLiked;
+    private Boolean isFollowingAuthor;
     private Boolean allowComments;
     private String visibility;
+    private Boolean deleted;
+    private Boolean unavailable;
 }

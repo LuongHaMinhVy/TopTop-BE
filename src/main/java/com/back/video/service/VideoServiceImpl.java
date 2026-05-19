@@ -1,6 +1,7 @@
 package com.back.video.service;
 
 import com.back.collection.repo.SavedVideoRepository;
+import com.back.collection.repo.CollectionVideoRepository;
 import com.back.notification.service.INotificationService;
 
 import com.back.block.service.IUserBlockService;
@@ -26,6 +27,7 @@ import org.springframework.security.core.Authentication;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.security.oauth2.client.authentication.OAuth2AuthenticationToken;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.multipart.MultipartFile;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
@@ -51,7 +53,9 @@ public class VideoServiceImpl implements IVideoService {
     private final R2StorageService storageService;
     private final IHashtagRepository hashtagRepo;
     private final SavedVideoRepository savedVideoRepository;
+    private final CollectionVideoRepository collectionVideoRepository;
     private final IUserBlockService userBlockService;
+    private final com.back.follow.repo.IFollowRepo followRepo;
 
     @Override
     public VideoResponseDTO uploadVideo(MultipartFile file, MultipartFile cover, VideoUploadRequestDTO requestDTO) throws IOException {
@@ -120,7 +124,12 @@ public class VideoServiceImpl implements IVideoService {
     public VideoResponseDTO getVideoById(Long id) {
         Video video = videoRepository.findById(id)
                 .orElseThrow(() -> new AppException(ErrorCode.FILE_NOT_FOUND));
-        userBlockService.assertNotBlockedEitherWay(getCurrentUser(), video.getUser());
+        if (video.isDeleted()) {
+            throw new AppException(ErrorCode.FILE_NOT_FOUND);
+        }
+        User currentUser = getCurrentUser();
+        userBlockService.assertNotBlockedEitherWay(currentUser, video.getUser());
+        checkVisibilityOrThrow(video, currentUser);
         return mapToResponseDTO(video);
     }
 
@@ -159,6 +168,9 @@ public class VideoServiceImpl implements IVideoService {
     public void reportVideo(Long id, String reason) {
         Video video = videoRepository.findById(id)
                 .orElseThrow(() -> new AppException(ErrorCode.FILE_NOT_FOUND));
+        if (video.isDeleted()) {
+            throw new AppException(ErrorCode.FILE_NOT_FOUND);
+        }
         userBlockService.assertNotBlockedEitherWay(getCurrentUser(), video.getUser());
         log.info("Video {} reported for reason: {}", id, reason);
     }
@@ -174,6 +186,9 @@ public class VideoServiceImpl implements IVideoService {
 
         Video video = videoRepository.findById(id)
                 .orElseThrow(() -> new AppException(ErrorCode.VIDEO_NOT_FOUND));
+        if (video.isDeleted()) {
+            throw new AppException(ErrorCode.VIDEO_NOT_FOUND);
+        }
         userBlockService.assertNotBlockedEitherWay(currentUser, video.getUser());
 
         if (videoLikeRepository.existsByUserIdAndVideoId(currentUser.getId(), id)) {
@@ -211,6 +226,9 @@ public class VideoServiceImpl implements IVideoService {
 
         Video video = videoRepository.findById(id)
                 .orElseThrow(() -> new AppException(ErrorCode.VIDEO_NOT_FOUND));
+        if (video.isDeleted()) {
+            throw new AppException(ErrorCode.VIDEO_NOT_FOUND);
+        }
         userBlockService.assertNotBlockedEitherWay(currentUser, video.getUser());
 
         videoLikeRepository.findByUserIdAndVideoId(currentUser.getId(), id).ifPresent(like -> {
@@ -226,7 +244,9 @@ public class VideoServiceImpl implements IVideoService {
     public VideoResponseDTO getVideoByUsernameAndId(String username, Long videoId) {
         Video video = videoRepository.findByUserUsernameAndId(username, videoId)
                 .orElseThrow(() -> new AppException(ErrorCode.FILE_NOT_FOUND));
-        userBlockService.assertNotBlockedEitherWay(getCurrentUser(), video.getUser());
+        User currentUser = getCurrentUser();
+        userBlockService.assertNotBlockedEitherWay(currentUser, video.getUser());
+        checkVisibilityOrThrow(video, currentUser);
 
         video.setViewCount(video.getViewCount() + 1);
         videoRepository.save(video);
@@ -235,6 +255,7 @@ public class VideoServiceImpl implements IVideoService {
     }
 
     @Scheduled(cron = "0 0 3 * * *")
+    @Transactional
     public void hardDeleteExpiredVideos() {
         LocalDateTime cutoff = LocalDateTime.now().minusDays(30);
         List<Video> expired = videoRepository.findExpiredVideos(cutoff);
@@ -243,6 +264,8 @@ public class VideoServiceImpl implements IVideoService {
             try {
                 String key = storageService.extractKeyFromUrl(video.getFileUrl());
                 storageService.deleteFile(key);
+                collectionVideoRepository.deleteByVideoId(video.getId());
+                savedVideoRepository.deleteByVideoId(video.getId());
                 videoRepository.delete(video);
                 log.info("Hard deleted video id={}", video.getId());
             } catch (Exception e) {
@@ -311,8 +334,38 @@ public class VideoServiceImpl implements IVideoService {
 
     private VideoResponseDTO mapToResponseDTO(Video video) {
         User currentUser = getCurrentUser();
+        if (video.isDeleted()) {
+            return VideoResponseDTO.builder()
+                    .id(video.getId())
+                    .title("Video không khả dụng")
+                    .description(null)
+                    .fileUrl("")
+                    .thumbnailUrl(null)
+                    .duration(null)
+                    .category(video.getCategory())
+                    .viewCount(0L)
+                    .likeCount(0L)
+                    .commentCount(0L)
+                    .saveCount(0L)
+                    .userId(video.getUser().getId())
+                    .username(video.getUser().getUsername())
+                    .userNickname(video.getUser().getNickname())
+                    .userAvatarUrl(video.getUser().getAvatarUrl())
+                    .createdAt(video.getCreatedAt())
+                    .isSaved(false)
+                    .isLiked(false)
+                    .isFollowingAuthor(false)
+                    .allowComments(false)
+                    .visibility(video.getVisibility() != null ? video.getVisibility().name() : "PUBLIC")
+                    .deleted(true)
+                    .unavailable(true)
+                    .build();
+        }
         boolean isSaved = currentUser != null && savedVideoRepository.existsByUserIdAndVideoId(currentUser.getId(), video.getId());
         boolean isLiked = currentUser != null && videoLikeRepository.existsByUserIdAndVideoId(currentUser.getId(), video.getId());
+        boolean isFollowingAuthor = currentUser != null
+                && !currentUser.getId().equals(video.getUser().getId())
+                && followRepo.existsByFollowerAndFollowing(currentUser, video.getUser());
 
         return VideoResponseDTO.builder()
                 .id(video.getId())
@@ -333,8 +386,11 @@ public class VideoServiceImpl implements IVideoService {
                 .createdAt(video.getCreatedAt())
                 .isSaved(isSaved)
                 .isLiked(isLiked)
+                .isFollowingAuthor(isFollowingAuthor)
                 .allowComments(video.getAllowComments())
                 .visibility(video.getVisibility() != null ? video.getVisibility().name() : "PUBLIC")
+                .deleted(false)
+                .unavailable(false)
                 .build();
     }
 
@@ -357,6 +413,9 @@ public class VideoServiceImpl implements IVideoService {
     public VideoResponseDTO updateVideo(Long id, VideoUploadRequestDTO requestDTO) {
         Video video = videoRepository.findById(id)
                 .orElseThrow(() -> new AppException(ErrorCode.FILE_NOT_FOUND));
+        if (video.isDeleted()) {
+            throw new AppException(ErrorCode.FILE_NOT_FOUND);
+        }
 
         User currentUser = getCurrentUser();
         if (currentUser == null || !video.getUser().getId().equals(currentUser.getId())) {
@@ -384,5 +443,61 @@ public class VideoServiceImpl implements IVideoService {
 
         video = videoRepository.save(video);
         return mapToResponseDTO(video);
+    }
+
+    @Override
+    public Page<VideoResponseDTO> getLikedVideos(Pageable pageable) {
+        User currentUser = getCurrentUser();
+        if (currentUser == null) {
+            throw new AppException(ErrorCode.UNAUTHORIZED);
+        }
+        return videoRepository.findLikedVideosByUserId(currentUser.getId(), pageable)
+                .map(this::mapToResponseDTO);
+    }
+
+    private void checkVisibilityOrThrow(Video video, User viewer) {
+        if (video.getVisibility() == null || video.getVisibility() == VideoVisibility.PUBLIC) {
+            return;
+        }
+
+        if (viewer == null) {
+            throw new AppException(ErrorCode.UNAUTHORIZED);
+        }
+
+        if (video.getUser().getId().equals(viewer.getId())) {
+            return;
+        }
+
+        if (video.getVisibility() == VideoVisibility.PRIVATE) {
+            throw new AppException(ErrorCode.USER_BLOCKED);
+        }
+
+        if (video.getVisibility() == com.back.video.model.enums.VideoVisibility.FRIENDS) {
+            boolean viewerFollowsOwner = followRepo.existsByFollowerAndFollowing(viewer, video.getUser());
+            boolean ownerFollowsViewer = followRepo.existsByFollowerAndFollowing(video.getUser(), viewer);
+            if (!viewerFollowsOwner || !ownerFollowsViewer) {
+                throw new AppException(ErrorCode.USER_BLOCKED);
+            }
+        }
+    }
+
+    @Override
+    public Page<VideoResponseDTO> getFollowingFeed(Pageable pageable) {
+        User currentUser = getCurrentUser();
+        if (currentUser == null) {
+            throw new AppException(ErrorCode.UNAUTHORIZED);
+        }
+        return videoRepository.findFollowingFeed(currentUser.getId(), pageable)
+                .map(this::mapToResponseDTO);
+    }
+
+    @Override
+    public Page<VideoResponseDTO> getFriendsFeed(Pageable pageable) {
+        User currentUser = getCurrentUser();
+        if (currentUser == null) {
+            throw new AppException(ErrorCode.UNAUTHORIZED);
+        }
+        return videoRepository.findFriendsFeed(currentUser.getId(), pageable)
+                .map(this::mapToResponseDTO);
     }
 }

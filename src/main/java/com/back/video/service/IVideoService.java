@@ -20,4 +20,7 @@ public interface IVideoService {
     VideoStatsResponseDTO unlikeVideo(Long id);
     VideoResponseDTO getVideoByUsernameAndId(String username, Long videoId);
     VideoResponseDTO updateVideo(Long id, VideoUploadRequestDTO requestDTO);
+    Page<VideoResponseDTO> getLikedVideos(Pageable pageable);
+    Page<VideoResponseDTO> getFollowingFeed(Pageable pageable);
+    Page<VideoResponseDTO> getFriendsFeed(Pageable pageable);
 }

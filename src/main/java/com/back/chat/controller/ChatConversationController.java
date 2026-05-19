@@ -3,6 +3,7 @@ package com.back.chat.controller;
 import com.back.chat.model.dto.request.CreateConversationRequestDTO;
 import com.back.chat.model.dto.response.ConversationResponseDTO;
 import com.back.chat.model.dto.response.UnreadCountResponseDTO;
+import com.back.chat.model.enums.ConversationStatus;
 import com.back.chat.service.IChatConversationService;
 import com.back.common.model.dto.response.ApiResponse;
 import com.back.common.model.dto.response.Meta;
@@ -27,10 +28,11 @@ public class ChatConversationController {
 
     @GetMapping
     public ResponseEntity<ApiResponse<List<ConversationResponseDTO>>> getConversations(
+            @RequestParam(defaultValue = "ACTIVE") ConversationStatus status,
             @PageableDefault(size = 20) Pageable pageable,
             Authentication authentication
     ) {
-        Page<ConversationResponseDTO> page = chatConversationService.getMyConversations(authentication, pageable);
+        Page<ConversationResponseDTO> page = chatConversationService.getMyConversations(authentication, status, pageable);
 
         return ResponseEntity.ok(ApiResponse.<List<ConversationResponseDTO>>builder()
                 .message("Conversations retrieved successfully")

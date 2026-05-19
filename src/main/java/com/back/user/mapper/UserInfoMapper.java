@@ -46,6 +46,7 @@ public class UserInfoMapper{
                 .dateOfBirth(user.getDateOfBirth())
                 .roles(roles)
                 .relationship(relationship)
+                .onboarded(user.getOnboarded())
                 .createdAt(user.getCreatedAt())
                 .build();
     }

@@ -118,6 +118,10 @@ public class User extends BaseEntity {
     @Column(nullable = false)
     private Boolean allowMessageFromEveryone = false;
 
+    @Builder.Default
+    @Column(nullable = false)
+    private Boolean onboarded = true;
+
     @ManyToMany(fetch = FetchType.EAGER)
     @JoinTable(
             name = "user_roles",

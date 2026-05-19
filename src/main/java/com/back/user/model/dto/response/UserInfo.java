@@ -60,6 +60,7 @@ public class UserInfo {
     private RelationshipStatus relationship;
 
     private List<String> roles;
+    private Boolean onboarded;
 
     private LocalDateTime createdAt;
 

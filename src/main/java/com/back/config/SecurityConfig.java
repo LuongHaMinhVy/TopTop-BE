@@ -93,6 +93,24 @@ public class SecurityConfig {
                         .requestMatchers("/api/v1/collections/**")
                         .hasAnyAuthority(RoleName.ROLE_USER.name(), RoleName.ROLE_ADMIN.name())
 
+                        // ── Following endpoints ──────────────────────────────────
+                        .requestMatchers(HttpMethod.GET, "/api/v1/following/suggestions").permitAll()
+                        .requestMatchers("/api/v1/following/**")
+                        .hasAnyAuthority(RoleName.ROLE_USER.name(), RoleName.ROLE_ADMIN.name())
+
+                        // ── Friends endpoints ────────────────────────────────────
+                        .requestMatchers("/api/v1/friends/**")
+                        .hasAnyAuthority(RoleName.ROLE_USER.name(), RoleName.ROLE_ADMIN.name())
+
+                        // ── Search endpoints ─────────────────────────────────────
+                        .requestMatchers(HttpMethod.GET, "/api/v1/search/top").permitAll()
+                        .requestMatchers(HttpMethod.GET, "/api/v1/search/users").permitAll()
+                        .requestMatchers(HttpMethod.GET, "/api/v1/search/videos").permitAll()
+                        .requestMatchers(HttpMethod.GET, "/api/v1/search/live").permitAll()
+                        .requestMatchers(HttpMethod.GET, "/api/v1/search/suggestions").permitAll()
+                        .requestMatchers("/api/v1/search/history", "/api/v1/search/history/**")
+                        .hasAnyAuthority(RoleName.ROLE_USER.name(), RoleName.ROLE_ADMIN.name())
+
                         // ── Track endpoints ──────────────────────────────────────
                         .requestMatchers(HttpMethod.GET, "/api/v1/tracks/**").permitAll()
                         .requestMatchers(HttpMethod.POST, "/api/v1/tracks/**")

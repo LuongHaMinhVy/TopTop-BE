@@ -12,6 +12,7 @@ import com.back.chat.repo.ConversationParticipantRepository;
 import com.back.chat.repo.ConversationRepository;
 import com.back.common.utils.exception.AppException;
 import com.back.common.utils.exception.ErrorCode;
+import com.back.follow.repo.IFollowRepo;
 import com.back.user.model.entity.User;
 import com.back.user.repo.IUserRepo;
 import lombok.RequiredArgsConstructor;
@@ -32,11 +33,25 @@ public class ChatConversationServiceImpl implements IChatConversationService {
     private final ConversationRepository conversationRepository;
     private final ConversationParticipantRepository participantRepository;
     private final IUserRepo userRepo;
+    private final IFollowRepo followRepo;
 
     @Override
-    public Page<ConversationResponseDTO> getMyConversations(Authentication authentication, Pageable pageable) {
+    public Page<ConversationResponseDTO> getMyConversations(Authentication authentication, ConversationStatus status, Pageable pageable) {
         User currentUser = getCurrentUser(authentication);
-        Page<Conversation> conversations = participantRepository.findConversationsByUser(currentUser, pageable);
+        Page<Conversation> conversations = status == ConversationStatus.REQUESTED
+                ? participantRepository.findRequestConversationsByUser(
+                        currentUser,
+                        currentUser.getId(),
+                        ConversationStatus.REQUESTED,
+                        pageable
+                )
+                : participantRepository.findInboxConversationsByUser(
+                        currentUser,
+                        currentUser.getId(),
+                        ConversationStatus.ACTIVE,
+                        ConversationStatus.REQUESTED,
+                        pageable
+                );
 
         return conversations.map(conv -> {
             ConversationParticipant currentParticipant = participantRepository.findByConversationAndUser(conv, currentUser).orElse(null);
@@ -61,6 +76,10 @@ public class ChatConversationServiceImpl implements IChatConversationService {
 
         if (existing.isPresent()) {
             Conversation conv = existing.get();
+            if (conv.getStatus() == ConversationStatus.REQUESTED && areFriends(currentUser, targetUser)) {
+                conv.setStatus(ConversationStatus.ACTIVE);
+                conv = conversationRepository.save(conv);
+            }
             ConversationParticipant currentParticipant = participantRepository.findByConversationAndUser(conv, currentUser).orElse(null);
             ConversationParticipant targetParticipant = participantRepository.findByConversationAndUser(conv, targetUser).orElse(null);
             return ConversationMapper.toResponse(conv, currentParticipant, targetParticipant);
@@ -68,7 +87,7 @@ public class ChatConversationServiceImpl implements IChatConversationService {
 
         Conversation conversation = Conversation.builder()
                 .type(ConversationType.DIRECT)
-                .status(ConversationStatus.ACTIVE)
+                .status(areFriends(currentUser, targetUser) ? ConversationStatus.ACTIVE : ConversationStatus.REQUESTED)
                 .directKey(directKey)
                 .createdBy(currentUser.getId())
                 .build();
@@ -108,10 +127,20 @@ public class ChatConversationServiceImpl implements IChatConversationService {
     @Override
     public UnreadCountResponseDTO getUnreadCount(Authentication authentication) {
         User currentUser = getCurrentUser(authentication);
-        long totalUnread = participantRepository.countUnreadConversations(currentUser);
+        long totalUnread = participantRepository.countUnreadInboxConversations(
+                currentUser,
+                currentUser.getId(),
+                ConversationStatus.ACTIVE,
+                ConversationStatus.REQUESTED
+        );
+        long requestUnread = participantRepository.countUnreadRequestConversations(
+                currentUser,
+                currentUser.getId(),
+                ConversationStatus.REQUESTED
+        );
         return UnreadCountResponseDTO.builder()
                 .totalUnread(totalUnread)
-                .requestUnread(0) // TODO: Implement requests
+                .requestUnread(requestUnread)
                 .build();
     }
 
@@ -135,5 +164,10 @@ public class ChatConversationServiceImpl implements IChatConversationService {
         long min = Math.min(id1, id2);
         long max = Math.max(id1, id2);
         return min + ":" + max;
+    }
+
+    private boolean areFriends(User firstUser, User secondUser) {
+        return followRepo.existsByFollowerAndFollowing(firstUser, secondUser)
+                && followRepo.existsByFollowerAndFollowing(secondUser, firstUser);
     }
 }

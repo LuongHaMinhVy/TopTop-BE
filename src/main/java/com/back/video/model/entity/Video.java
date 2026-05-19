@@ -7,7 +7,6 @@ import com.back.video.model.enums.VideoVisibility;
 import jakarta.persistence.*;
 import lombok.*;
 import lombok.experimental.SuperBuilder;
-import org.hibernate.annotations.SQLRestriction;
 
 import java.time.LocalDateTime;
 
@@ -18,7 +17,6 @@ import java.time.LocalDateTime;
 @Setter
 @SuperBuilder
 @Table(name = "videos")
-@SQLRestriction("deleted_at IS NULL")
 public class Video extends BaseEntity {
 
     @Column(nullable = false)

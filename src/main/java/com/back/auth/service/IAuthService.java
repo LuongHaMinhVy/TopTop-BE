@@ -19,4 +19,5 @@ public interface IAuthService{
     void forgotPassword(String email);
     void resetPassword(String token, String newPassword);
     AuthResponse refreshToken(HttpServletRequest request, HttpServletResponse response);
+    AuthResponse onboardOAuth2(com.back.auth.model.dto.request.OAuth2OnboardRequest request, HttpServletRequest servletRequest, HttpServletResponse servletResponse);
 }

@@ -17,6 +17,7 @@ import com.back.user.model.entity.User;
 import com.back.user.repo.IUserRepo;
 import com.back.video.model.dto.request.VideoResponseDTO;
 import com.back.video.model.entity.Video;
+import com.back.video.repo.IVideoLikeRepository;
 import com.back.video.repo.IVideoRepository;
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.Page;
@@ -40,13 +41,14 @@ public class CollectionServiceImpl implements ICollectionService {
     private final IUserRepo userRepo;
     private final CollectionMapper collectionMapper;
     private final IUserBlockService userBlockService;
+    private final IVideoLikeRepository videoLikeRepository;
 
     @Override
     @Transactional(readOnly = true)
     public Page<VideoResponseDTO> getFavoriteVideos(Pageable pageable) {
         User user = getCurrentUserOrThrow();
         return savedVideoRepository.findVisibleByUserIdOrderByCreatedAtDesc(user.getId(), pageable)
-                .map(savedVideo -> mapToVideoResponseDTO(savedVideo.getVideo(), true));
+                .map(savedVideo -> mapToVideoResponseDTO(savedVideo.getVideo(), user, true));
     }
 
     @Override
@@ -65,7 +67,7 @@ public class CollectionServiceImpl implements ICollectionService {
             videoRepository.save(video);
         }
 
-        return mapToVideoResponseDTO(video, true);
+        return mapToVideoResponseDTO(video, user, true);
     }
 
     @Override
@@ -85,7 +87,7 @@ public class CollectionServiceImpl implements ICollectionService {
                     }
                 });
 
-        return mapToVideoResponseDTO(video, false);
+        return mapToVideoResponseDTO(video, user, false);
     }
 
     @Override
@@ -180,7 +182,7 @@ public class CollectionServiceImpl implements ICollectionService {
         VideoCollection collection = getOwnedCollectionOrThrow(collectionId, user.getId());
 
         return collectionVideoRepository.findVisibleByCollectionIdOrderByAddedAtDesc(collection.getId(), user.getId(), pageable)
-                .map(collectionVideo -> mapToVideoResponseDTO(collectionVideo.getVideo(), true));
+                .map(collectionVideo -> mapToVideoResponseDTO(collectionVideo.getVideo(), user, true));
     }
 
     @Override
@@ -195,6 +197,7 @@ public class CollectionServiceImpl implements ICollectionService {
                         pageable)
                 .map(collectionVideo -> mapToVideoResponseDTO(
                         collectionVideo.getVideo(),
+                        currentUser,
                         currentUser != null && savedVideoRepository.existsByUserIdAndVideoId(
                                 currentUser.getId(),
                                 collectionVideo.getVideo().getId())));
@@ -217,7 +220,7 @@ public class CollectionServiceImpl implements ICollectionService {
                     .build());
         }
 
-        return mapToVideoResponseDTO(video, true);
+        return mapToVideoResponseDTO(video, user, true);
     }
 
     @Override
@@ -231,8 +234,12 @@ public class CollectionServiceImpl implements ICollectionService {
     }
 
     private Video getVideoOrThrow(Long videoId) {
-        return videoRepository.findById(videoId)
+        Video video = videoRepository.findById(videoId)
                 .orElseThrow(() -> new AppException(ErrorCode.VIDEO_NOT_FOUND));
+        if (video.isDeleted()) {
+            throw new AppException(ErrorCode.VIDEO_NOT_FOUND);
+        }
+        return video;
     }
 
     private VideoCollection getOwnedCollectionOrThrow(Long collectionId, Long userId) {
@@ -303,7 +310,36 @@ public class CollectionServiceImpl implements ICollectionService {
         return description.trim();
     }
 
-    private VideoResponseDTO mapToVideoResponseDTO(Video video, boolean isSaved) {
+    private VideoResponseDTO mapToVideoResponseDTO(Video video, User currentUser, boolean isSaved) {
+        if (video.isDeleted()) {
+            return VideoResponseDTO.builder()
+                    .id(video.getId())
+                    .title("Video không khả dụng")
+                    .description(null)
+                    .fileUrl("")
+                    .thumbnailUrl(null)
+                    .duration(null)
+                    .category(video.getCategory())
+                    .viewCount(0L)
+                    .likeCount(0L)
+                    .commentCount(0L)
+                    .saveCount(0L)
+                    .userId(video.getUser().getId())
+                    .username(video.getUser().getUsername())
+                    .userNickname(video.getUser().getNickname())
+                    .userAvatarUrl(video.getUser().getAvatarUrl())
+                    .createdAt(video.getCreatedAt())
+                    .isSaved(false)
+                    .isLiked(false)
+                    .allowComments(false)
+                    .visibility(video.getVisibility() != null ? video.getVisibility().name() : "PUBLIC")
+                    .deleted(true)
+                    .unavailable(true)
+                    .build();
+        }
+
+        boolean isLiked = currentUser != null && videoLikeRepository.existsByUserIdAndVideoId(currentUser.getId(), video.getId());
+
         return VideoResponseDTO.builder()
                 .id(video.getId())
                 .title(video.getTitle())
@@ -322,6 +358,11 @@ public class CollectionServiceImpl implements ICollectionService {
                 .userAvatarUrl(video.getUser().getAvatarUrl())
                 .createdAt(video.getCreatedAt())
                 .isSaved(isSaved)
+                .isLiked(isLiked)
+                .allowComments(video.getAllowComments())
+                .visibility(video.getVisibility() != null ? video.getVisibility().name() : "PUBLIC")
+                .deleted(false)
+                .unavailable(false)
                 .build();
     }
 

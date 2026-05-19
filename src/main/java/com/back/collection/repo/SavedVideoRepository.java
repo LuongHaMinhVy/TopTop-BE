@@ -25,6 +25,7 @@ public interface SavedVideoRepository extends JpaRepository<SavedVideo, Long> {
     @Query("""
             SELECT sv FROM SavedVideo sv
             WHERE sv.user.id = :userId
+              AND sv.video.deletedAt IS NULL
               AND NOT EXISTS (
                     SELECT b.id FROM UserBlock b
                     WHERE (b.blocker.id = :userId AND b.blocked = sv.video.user)
@@ -33,4 +34,6 @@ public interface SavedVideoRepository extends JpaRepository<SavedVideo, Long> {
             ORDER BY sv.createdAt DESC
             """)
     Page<SavedVideo> findVisibleByUserIdOrderByCreatedAtDesc(@Param("userId") Long userId, Pageable pageable);
+
+    void deleteByVideoId(Long videoId);
 }

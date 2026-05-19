@@ -17,47 +17,190 @@ import java.util.List;
 public interface IVideoRepository extends JpaRepository<Video, Long> {
     
     @EntityGraph(attributePaths = {"user"})
+    @Query("SELECT v FROM Video v WHERE v.deletedAt IS NULL")
     Page<Video> findAll(Pageable pageable);
 
     @EntityGraph(attributePaths = {"user"})
     @Query("""
             SELECT v FROM Video v
-            WHERE :viewerId IS NULL
-               OR v.user.id = :viewerId
-               OR NOT EXISTS (
-                    SELECT b.id FROM UserBlock b
-                    WHERE (b.blocker.id = :viewerId AND b.blocked = v.user)
-                       OR (b.blocked.id = :viewerId AND b.blocker = v.user)
-               )
+            WHERE v.deletedAt IS NULL
+              AND (
+                (
+                    v.visibility = com.back.video.model.enums.VideoVisibility.PUBLIC
+                    AND (
+                        :viewerId IS NULL
+                        OR v.user.id = :viewerId
+                        OR NOT EXISTS (
+                            SELECT b.id FROM UserBlock b
+                            WHERE (b.blocker.id = :viewerId AND b.blocked = v.user)
+                               OR (b.blocked.id = :viewerId AND b.blocker = v.user)
+                        )
+                    )
+                )
+                OR (
+                    :viewerId IS NOT NULL
+                    AND v.user.id = :viewerId
+                )
+                OR (
+                    :viewerId IS NOT NULL
+                    AND v.visibility = com.back.video.model.enums.VideoVisibility.FRIENDS
+                    AND NOT EXISTS (
+                        SELECT b.id FROM UserBlock b
+                        WHERE (b.blocker.id = :viewerId AND b.blocked = v.user)
+                           OR (b.blocked.id = :viewerId AND b.blocker = v.user)
+                    )
+                    AND EXISTS (
+                        SELECT f1.id FROM Follow f1
+                        WHERE f1.follower.id = :viewerId AND f1.following.id = v.user.id
+                    )
+                    AND EXISTS (
+                        SELECT f2.id FROM Follow f2
+                        WHERE f2.follower.id = v.user.id AND f2.following.id = :viewerId
+                    )
+                )
+              )
             """)
     Page<Video> findAllVisibleForViewer(@Param("viewerId") Long viewerId, Pageable pageable);
 
     @EntityGraph(attributePaths = {"user"})
-    Page<Video> findByUserId(Long userId, Pageable pageable);
+    @Query("SELECT v FROM Video v WHERE v.user.id = :userId AND v.deletedAt IS NULL")
+    Page<Video> findByUserId(@Param("userId") Long userId, Pageable pageable);
 
     @EntityGraph(attributePaths = {"user"})
     @Query("""
             SELECT v FROM Video v
             WHERE v.user.id = :userId
+              AND v.deletedAt IS NULL
               AND (
-                    :viewerId IS NULL
-                    OR v.user.id = :viewerId
-                    OR NOT EXISTS (
+                (
+                    v.visibility = com.back.video.model.enums.VideoVisibility.PUBLIC
+                    AND (
+                        :viewerId IS NULL
+                        OR v.user.id = :viewerId
+                        OR NOT EXISTS (
+                            SELECT b.id FROM UserBlock b
+                            WHERE (b.blocker.id = :viewerId AND b.blocked = v.user)
+                               OR (b.blocked.id = :viewerId AND b.blocker = v.user)
+                        )
+                    )
+                )
+                OR (
+                    :viewerId IS NOT NULL
+                    AND v.user.id = :viewerId
+                )
+                OR (
+                    :viewerId IS NOT NULL
+                    AND v.visibility = com.back.video.model.enums.VideoVisibility.FRIENDS
+                    AND NOT EXISTS (
                         SELECT b.id FROM UserBlock b
                         WHERE (b.blocker.id = :viewerId AND b.blocked = v.user)
                            OR (b.blocked.id = :viewerId AND b.blocker = v.user)
                     )
+                    AND EXISTS (
+                        SELECT f1.id FROM Follow f1
+                        WHERE f1.follower.id = :viewerId AND f1.following.id = v.user.id
+                    )
+                    AND EXISTS (
+                        SELECT f2.id FROM Follow f2
+                        WHERE f2.follower.id = v.user.id AND f2.following.id = :viewerId
+                    )
+                )
               )
             """)
-    Page<Video> findByUserIdVisibleForViewer(
+            Page<Video> findByUserIdVisibleForViewer(
             @Param("userId") Long userId,
             @Param("viewerId") Long viewerId,
             Pageable pageable);
 
-    @Query("SELECT v FROM Video v WHERE v.deletedAt < :cutoff")
+    @EntityGraph(attributePaths = {"user"})
+    @Query("""
+            SELECT v FROM Video v
+            WHERE v.deletedAt IS NULL
+              AND v.user.id IN (
+                  SELECT f.following.id FROM Follow f
+                  WHERE f.follower.id = :viewerId
+              )
+              AND (
+                v.visibility = com.back.video.model.enums.VideoVisibility.PUBLIC
+                OR (
+                    v.visibility = com.back.video.model.enums.VideoVisibility.FRIENDS
+                    AND EXISTS (
+                        SELECT f2.id FROM Follow f2
+                        WHERE f2.follower.id = v.user.id AND f2.following.id = :viewerId
+                    )
+                )
+              )
+              AND NOT EXISTS (
+                  SELECT b.id FROM UserBlock b
+                  WHERE (b.blocker.id = :viewerId AND b.blocked = v.user)
+                     OR (b.blocked.id = :viewerId AND b.blocker = v.user)
+              )
+            ORDER BY v.createdAt DESC
+            """)
+    Page<Video> findFollowingFeed(@Param("viewerId") Long viewerId, Pageable pageable);
+
+    @EntityGraph(attributePaths = {"user"})
+    @Query("""
+            SELECT v FROM Video v
+            WHERE v.deletedAt IS NULL
+              AND v.user.id IN (
+                  SELECT f.following.id FROM Follow f
+                  WHERE f.follower.id = :viewerId
+                    AND EXISTS (
+                        SELECT f2.id FROM Follow f2
+                        WHERE f2.follower.id = f.following.id AND f2.following.id = :viewerId
+                    )
+              )
+              AND (
+                v.visibility = com.back.video.model.enums.VideoVisibility.PUBLIC
+                OR v.visibility = com.back.video.model.enums.VideoVisibility.FRIENDS
+              )
+              AND NOT EXISTS (
+                  SELECT b.id FROM UserBlock b
+                  WHERE (b.blocker.id = :viewerId AND b.blocked = v.user)
+                     OR (b.blocked.id = :viewerId AND b.blocker = v.user)
+              )
+            ORDER BY v.createdAt DESC
+            """)
+    Page<Video> findFriendsFeed(@Param("viewerId") Long viewerId, Pageable pageable);
+
+    @EntityGraph(attributePaths = {"user"})
+    @Query("""
+            SELECT v FROM Video v
+            JOIN VideoLike vl ON vl.video = v
+            WHERE vl.user.id = :userId
+              AND v.deletedAt IS NULL
+              AND (
+                    v.user.id = :userId
+                    OR NOT EXISTS (
+                        SELECT b.id FROM UserBlock b
+                        WHERE (b.blocker.id = :userId AND b.blocked = v.user)
+                           OR (b.blocked.id = :userId AND b.blocker = v.user)
+                    )
+              )
+            ORDER BY vl.id DESC
+            """)
+    Page<Video> findLikedVideosByUserId(@Param("userId") Long userId, Pageable pageable);
+
+    @Query("SELECT v FROM Video v WHERE v.deletedAt IS NOT NULL AND v.deletedAt < :cutoff")
     List<Video> findExpiredVideos(LocalDateTime cutoff);
 
     @EntityGraph(attributePaths = {"user", "hashtags"})
-    @Query("SELECT v FROM Video v WHERE LOWER(v.user.username) = LOWER(:username) AND v.id = :id")
+    @Query("SELECT v FROM Video v WHERE LOWER(v.user.username) = LOWER(:username) AND v.id = :id AND v.deletedAt IS NULL")
     java.util.Optional<Video> findByUserUsernameAndId(String username, Long id);
+
+    @EntityGraph(attributePaths = {"user"})
+    @Query("""
+            SELECT v FROM Video v
+            WHERE v.deletedAt IS NULL
+              AND v.visibility = com.back.video.model.enums.VideoVisibility.PUBLIC
+              AND (
+                    LOWER(v.title) LIKE LOWER(CONCAT('%', :keyword, '%'))
+                 OR LOWER(COALESCE(v.description, '')) LIKE LOWER(CONCAT('%', :keyword, '%'))
+                 OR LOWER(v.user.username) LIKE LOWER(CONCAT('%', :keyword, '%'))
+                 OR LOWER(v.user.nickname) LIKE LOWER(CONCAT('%', :keyword, '%'))
+              )
+            ORDER BY v.likeCount DESC, v.viewCount DESC, v.createdAt DESC
+            """)
+    Page<Video> searchPublicVideos(@Param("keyword") String keyword, Pageable pageable);
 }

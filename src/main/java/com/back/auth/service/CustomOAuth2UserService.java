@@ -136,6 +136,7 @@ public class CustomOAuth2UserService extends DefaultOAuth2UserService {
                 .allowDownload(true)
                 .allowMessageFromEveryone(false)
                 .dateOfBirth(LocalDate.of(2000, 1, 1))
+                .onboarded(false)
                 .createdAt(LocalDateTime.now())
                 .build();
 

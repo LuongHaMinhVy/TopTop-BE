@@ -107,4 +107,18 @@ public class AuthController{
                 .timestamp(LocalDateTime.now())
                 .build());
     }
+
+    @PostMapping("/oauth2/onboard")
+    public ResponseEntity<ApiResponse<AuthResponse>> onboardOAuth2(
+            @Valid @RequestBody com.back.auth.model.dto.request.OAuth2OnboardRequest request,
+            HttpServletRequest servletRequest,
+            HttpServletResponse servletResponse) {
+        AuthResponse result = authService.onboardOAuth2(request, servletRequest, servletResponse);
+        return ResponseEntity.ok(ApiResponse.<AuthResponse>builder()
+                .message("Onboarding successful")
+                .data(result)
+                .status(HttpStatus.OK.value())
+                .timestamp(LocalDateTime.now())
+                .build());
+    }
 }

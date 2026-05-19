@@ -401,4 +401,54 @@ public class AuthServiceImpl implements IAuthService {
                 """.formatted(button, greeting, body, resetLink, button, copyLink, resetLink,
                         warningTitle, warningExpiry, warningOnce, warningNoShare, footerIgnore);
     }
+
+    @Transactional
+    @Override
+    public AuthResponse onboardOAuth2(com.back.auth.model.dto.request.OAuth2OnboardRequest onboardRequest, HttpServletRequest servletRequest, HttpServletResponse servletResponse) {
+        org.springframework.security.core.Authentication authentication = org.springframework.security.core.context.SecurityContextHolder.getContext().getAuthentication();
+        if (authentication == null || !authentication.isAuthenticated() || authentication.getName().equals("anonymousUser")) {
+            throw new AppException(ErrorCode.UNAUTHORIZED);
+        }
+
+        String email;
+        if (authentication instanceof org.springframework.security.oauth2.client.authentication.OAuth2AuthenticationToken oauthToken) {
+            email = oauthToken.getPrincipal().getAttribute("email");
+        } else {
+            email = authentication.getName();
+        }
+
+        User user = userRepo.findByEmail(email)
+                .orElseThrow(() -> new AppException(ErrorCode.USER_NOT_FOUND));
+
+        if (user.getOnboarded()) {
+            throw new AppException(ErrorCode.BAD_REQUEST, "User is already onboarded");
+        }
+
+        if (!user.getUsername().equals(onboardRequest.getUsername()) && userRepo.existsByUsername(onboardRequest.getUsername())) {
+            throw new AppException(ErrorCode.USERNAME_ALREADY_EXISTS);
+        }
+
+        user.setUsername(onboardRequest.getUsername());
+        user.setDateOfBirth(LocalDate.parse(onboardRequest.getDateOfBirth()));
+        user.setOnboarded(true);
+
+        user = userRepo.save(user);
+
+        String accessToken = jwtService.generateAccessToken(user);
+        String refreshToken = jwtService.generateRefreshToken(user);
+
+        cookieService.add(servletResponse, "accessToken", accessToken,
+                (int)(accessTokenExpiration / 1000), servletRequest);
+        cookieService.add(servletResponse, "refreshToken", refreshToken,
+                (int)(refreshTokenExpiration / 1000), servletRequest);
+
+        UserInfo userInfo = UserInfoMapper.buildUserInfo(user);
+
+        return AuthResponse.builder()
+                .user(userInfo)
+                .accessToken(accessToken)
+                .tokenType("Bearer")
+                .expiresIn(accessTokenExpiration)
+                .build();
+    }
 }

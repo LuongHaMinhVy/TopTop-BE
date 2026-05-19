@@ -66,7 +66,18 @@ public interface CollectionVideoRepository extends JpaRepository<CollectionVideo
     @EntityGraph(attributePaths = {"video"})
     Optional<CollectionVideo> findFirstByCollectionIdOrderByAddedAtDesc(Long collectionId);
 
+    @EntityGraph(attributePaths = {"video"})
+    @Query("""
+            SELECT cv FROM CollectionVideo cv
+            WHERE cv.collection.id = :collectionId
+              AND cv.video.deletedAt IS NULL
+            ORDER BY cv.addedAt DESC
+            """)
+    Optional<CollectionVideo> findFirstAvailableByCollectionIdOrderByAddedAtDesc(@Param("collectionId") Long collectionId);
+
     void deleteByCollectionId(Long collectionId);
+
+    void deleteByVideoId(Long videoId);
 
     @Modifying
     @Query("DELETE FROM CollectionVideo cv WHERE cv.video.id = :videoId AND cv.collection.user.id = :userId")

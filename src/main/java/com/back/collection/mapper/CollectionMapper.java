@@ -16,7 +16,7 @@ public class CollectionMapper {
     public CollectionResponseDTO toResponseDTO(VideoCollection collection) {
         Long videoCount = collectionVideoRepository.countByCollectionId(collection.getId());
         String coverUrl = collectionVideoRepository
-                .findFirstByCollectionIdOrderByAddedAtDesc(collection.getId())
+                .findFirstAvailableByCollectionIdOrderByAddedAtDesc(collection.getId())
                 .map(CollectionVideo::getVideo)
                 .map(video -> video.getThumbnailUrl() != null ? video.getThumbnailUrl() : video.getFileUrl())
                 .orElse(null);
