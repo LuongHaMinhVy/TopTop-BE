@@ -11,16 +11,20 @@ import com.back.common.utils.exception.ErrorCode;
 import com.back.user.model.entity.User;
 import com.back.user.repo.IUserRepo;
 import com.back.video.model.dto.request.VideoResponseDTO;
+import com.back.video.model.dto.response.VideoRepostUserResponseDTO;
 import com.back.video.model.dto.response.VideoStatsResponseDTO;
 import com.back.video.model.dto.response.VideoUploadRequestDTO;
 import com.back.video.model.entity.Video;
 import com.back.video.model.entity.VideoLike;
+import com.back.video.model.entity.VideoRepost;
 import com.back.video.repo.IVideoLikeRepository;
 import com.back.video.repo.IVideoRepository;
+import com.back.video.repo.IVideoRepostRepository;
 import com.back.hashtag.repo.IHashtagRepository;
 import com.back.hashtag.model.entity.Hashtag;
 import com.back.video.model.enums.VideoVisibility;
 import lombok.RequiredArgsConstructor;
+import org.springframework.data.domain.Sort;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.security.core.Authentication;
@@ -30,6 +34,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.multipart.MultipartFile;
 import org.springframework.data.domain.Page;
+import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
 import java.io.IOException;
 import java.nio.file.Files;
@@ -49,6 +54,7 @@ public class VideoServiceImpl implements IVideoService {
 
     private final IVideoRepository videoRepository;
     private final IVideoLikeRepository videoLikeRepository;
+    private final IVideoRepostRepository videoRepostRepository;
     private final IUserRepo userRepo;
     private final R2StorageService storageService;
     private final IHashtagRepository hashtagRepo;
@@ -136,8 +142,14 @@ public class VideoServiceImpl implements IVideoService {
     @Override
     public Page<VideoResponseDTO> getAllVideos(Pageable pageable) {
         User currentUser = getCurrentUser();
-        return videoRepository.findAllVisibleForViewer(currentUser == null ? null : currentUser.getId(), pageable)
-                .map(this::mapToResponseDTO);
+        Long viewerId = currentUser == null ? null : currentUser.getId();
+        
+        Pageable candidatePageable = PageRequest.of(0, 500, Sort.by(Sort.Direction.DESC, "createdAt"));
+        List<Video> candidates = new java.util.ArrayList<>(videoRepository.findAllVisibleForViewer(viewerId, candidatePageable).getContent());
+        
+        candidates.sort((v1, v2) -> Double.compare(calculateForYouScore(v2, currentUser), calculateForYouScore(v1, currentUser)));
+        
+        return paginateList(candidates, pageable).map(this::mapToResponseDTO);
     }
 
     @Override
@@ -241,6 +253,52 @@ public class VideoServiceImpl implements IVideoService {
     }
 
     @Override
+    public VideoStatsResponseDTO repostVideo(Long id) {
+        User currentUser = getCurrentUser();
+        if (currentUser == null) {
+            throw new AppException(ErrorCode.UNAUTHORIZED);
+        }
+
+        Video video = videoRepository.findById(id)
+                .orElseThrow(() -> new AppException(ErrorCode.VIDEO_NOT_FOUND));
+        if (video.isDeleted()) {
+            throw new AppException(ErrorCode.VIDEO_NOT_FOUND);
+        }
+        userBlockService.assertNotBlockedEitherWay(currentUser, video.getUser());
+        checkVisibilityOrThrow(video, currentUser);
+
+        if (!videoRepostRepository.existsByUserIdAndVideoId(currentUser.getId(), id)) {
+            videoRepostRepository.save(VideoRepost.builder()
+                    .user(currentUser)
+                    .video(video)
+                    .build());
+        }
+
+        return mapToStatsDTO(video, videoLikeRepository.existsByUserIdAndVideoId(currentUser.getId(), id));
+    }
+
+    @Override
+    public VideoStatsResponseDTO unrepostVideo(Long id) {
+        User currentUser = getCurrentUser();
+        if (currentUser == null) {
+            throw new AppException(ErrorCode.UNAUTHORIZED);
+        }
+
+        Video video = videoRepository.findById(id)
+                .orElseThrow(() -> new AppException(ErrorCode.VIDEO_NOT_FOUND));
+        if (video.isDeleted()) {
+            throw new AppException(ErrorCode.VIDEO_NOT_FOUND);
+        }
+        userBlockService.assertNotBlockedEitherWay(currentUser, video.getUser());
+        checkVisibilityOrThrow(video, currentUser);
+
+        videoRepostRepository.findByUserIdAndVideoId(currentUser.getId(), id)
+                .ifPresent(videoRepostRepository::delete);
+
+        return mapToStatsDTO(video, videoLikeRepository.existsByUserIdAndVideoId(currentUser.getId(), id));
+    }
+
+    @Override
     public VideoResponseDTO getVideoByUsernameAndId(String username, Long videoId) {
         Video video = videoRepository.findByUserUsernameAndId(username, videoId)
                 .orElseThrow(() -> new AppException(ErrorCode.FILE_NOT_FOUND));
@@ -266,6 +324,7 @@ public class VideoServiceImpl implements IVideoService {
                 storageService.deleteFile(key);
                 collectionVideoRepository.deleteByVideoId(video.getId());
                 savedVideoRepository.deleteByVideoId(video.getId());
+                videoRepostRepository.deleteByVideoId(video.getId());
                 videoRepository.delete(video);
                 log.info("Hard deleted video id={}", video.getId());
             } catch (Exception e) {
@@ -347,6 +406,7 @@ public class VideoServiceImpl implements IVideoService {
                     .likeCount(0L)
                     .commentCount(0L)
                     .saveCount(0L)
+                    .shareCount(0L)
                     .userId(video.getUser().getId())
                     .username(video.getUser().getUsername())
                     .userNickname(video.getUser().getNickname())
@@ -354,6 +414,8 @@ public class VideoServiceImpl implements IVideoService {
                     .createdAt(video.getCreatedAt())
                     .isSaved(false)
                     .isLiked(false)
+                    .isReposted(false)
+                    .repostedBy(List.of())
                     .isFollowingAuthor(false)
                     .allowComments(false)
                     .visibility(video.getVisibility() != null ? video.getVisibility().name() : "PUBLIC")
@@ -363,9 +425,11 @@ public class VideoServiceImpl implements IVideoService {
         }
         boolean isSaved = currentUser != null && savedVideoRepository.existsByUserIdAndVideoId(currentUser.getId(), video.getId());
         boolean isLiked = currentUser != null && videoLikeRepository.existsByUserIdAndVideoId(currentUser.getId(), video.getId());
+        boolean isReposted = currentUser != null && videoRepostRepository.existsByUserIdAndVideoId(currentUser.getId(), video.getId());
         boolean isFollowingAuthor = currentUser != null
                 && !currentUser.getId().equals(video.getUser().getId())
                 && followRepo.existsByFollowerAndFollowing(currentUser, video.getUser());
+        long repostCount = videoRepostRepository.countByVideoId(video.getId());
 
         return VideoResponseDTO.builder()
                 .id(video.getId())
@@ -379,6 +443,7 @@ public class VideoServiceImpl implements IVideoService {
                 .likeCount(video.getLikeCount())
                 .commentCount(video.getCommentCount())
                 .saveCount(video.getSaveCount() == null ? 0L : video.getSaveCount())
+                .shareCount(repostCount)
                 .userId(video.getUser().getId())
                 .username(video.getUser().getUsername())
                 .userNickname(video.getUser().getNickname())
@@ -386,6 +451,8 @@ public class VideoServiceImpl implements IVideoService {
                 .createdAt(video.getCreatedAt())
                 .isSaved(isSaved)
                 .isLiked(isLiked)
+                .isReposted(isReposted)
+                .repostedBy(mapRepostUsers(video, currentUser))
                 .isFollowingAuthor(isFollowingAuthor)
                 .allowComments(video.getAllowComments())
                 .visibility(video.getVisibility() != null ? video.getVisibility().name() : "PUBLIC")
@@ -395,13 +462,46 @@ public class VideoServiceImpl implements IVideoService {
     }
 
     private VideoStatsResponseDTO mapToStatsDTO(Video video, boolean liked) {
+        User currentUser = getCurrentUser();
+        boolean isReposted = currentUser != null && videoRepostRepository.existsByUserIdAndVideoId(currentUser.getId(), video.getId());
         return VideoStatsResponseDTO.builder()
                 .videoId(video.getId())
                 .liked(liked)
                 .likeCount(safe(video.getLikeCount()))
                 .commentCount(safe(video.getCommentCount()))
                 .saveCount(safe(video.getSaveCount()))
-                .shareCount(0L)
+                .shareCount(videoRepostRepository.countByVideoId(video.getId()))
+                .reposted(isReposted)
+                .repostedBy(mapRepostUsers(video, currentUser))
+                .build();
+    }
+
+    private List<VideoRepostUserResponseDTO> mapRepostUsers(Video video, User currentUser) {
+        if (currentUser == null) {
+            return List.of();
+        }
+
+        return videoRepostRepository.findRecentByVideoId(video.getId(), PageRequest.of(0, 20)).stream()
+                .filter(repost -> shouldShowRepostUser(repost.getUser(), currentUser))
+                .limit(2)
+                .map(repost -> mapRepostUser(repost.getUser(), currentUser))
+                .toList();
+    }
+
+    private boolean shouldShowRepostUser(User repostUser, User currentUser) {
+        if (repostUser.getId().equals(currentUser.getId())) {
+            return true;
+        }
+        return followRepo.existsByFollowerAndFollowing(currentUser, repostUser);
+    }
+
+    private VideoRepostUserResponseDTO mapRepostUser(User user, User currentUser) {
+        return VideoRepostUserResponseDTO.builder()
+                .id(user.getId())
+                .username(user.getUsername())
+                .nickname(user.getNickname())
+                .avatarUrl(user.getAvatarUrl())
+                .isCurrentUser(currentUser != null && currentUser.getId().equals(user.getId()))
                 .build();
     }
 
@@ -455,6 +555,17 @@ public class VideoServiceImpl implements IVideoService {
                 .map(this::mapToResponseDTO);
     }
 
+    @Override
+    public Page<VideoResponseDTO> getRepostedVideosByUsername(String username, Pageable pageable) {
+        userRepo.findByUsername(username)
+                .orElseThrow(() -> new AppException(ErrorCode.USER_NOT_FOUND));
+
+        User currentUser = getCurrentUser();
+        Long viewerId = currentUser == null ? null : currentUser.getId();
+        return videoRepostRepository.findRepostedVideosByUsernameVisibleForViewer(username, viewerId, pageable)
+                .map(this::mapToResponseDTO);
+    }
+
     private void checkVisibilityOrThrow(Video video, User viewer) {
         if (video.getVisibility() == null || video.getVisibility() == VideoVisibility.PUBLIC) {
             return;
@@ -487,8 +598,13 @@ public class VideoServiceImpl implements IVideoService {
         if (currentUser == null) {
             throw new AppException(ErrorCode.UNAUTHORIZED);
         }
-        return videoRepository.findFollowingFeed(currentUser.getId(), pageable)
-                .map(this::mapToResponseDTO);
+        
+        Pageable candidatePageable = org.springframework.data.domain.PageRequest.of(0, 500);
+        List<Video> candidates = new java.util.ArrayList<>(videoRepository.findFollowingFeed(currentUser.getId(), candidatePageable).getContent());
+        
+        candidates.sort((v1, v2) -> Double.compare(calculateFollowingScore(v2, currentUser), calculateFollowingScore(v1, currentUser)));
+        
+        return paginateList(candidates, pageable).map(this::mapToResponseDTO);
     }
 
     @Override
@@ -497,7 +613,60 @@ public class VideoServiceImpl implements IVideoService {
         if (currentUser == null) {
             throw new AppException(ErrorCode.UNAUTHORIZED);
         }
-        return videoRepository.findFriendsFeed(currentUser.getId(), pageable)
-                .map(this::mapToResponseDTO);
+        
+        Pageable candidatePageable = org.springframework.data.domain.PageRequest.of(0, 500);
+        List<Video> candidates = new java.util.ArrayList<>(videoRepository.findFriendsFeed(currentUser.getId(), candidatePageable).getContent());
+        
+        candidates.sort((v1, v2) -> Double.compare(calculateFriendsScore(v2, currentUser), calculateFriendsScore(v1, currentUser)));
+        
+        return paginateList(candidates, pageable).map(this::mapToResponseDTO);
+    }
+
+    private Page<Video> paginateList(List<Video> list, Pageable pageable) {
+        int start = (int) pageable.getOffset();
+        int end = Math.min((start + pageable.getPageSize()), list.size());
+        List<Video> subList = start > list.size() ? new java.util.ArrayList<>() : list.subList(start, end);
+        return new org.springframework.data.domain.PageImpl<>(subList, pageable, list.size());
+    }
+
+    private double calculateForYouScore(Video video, User currentUser) {
+        double interactionScore = (safe(video.getLikeCount()) * 2.0 + safe(video.getCommentCount()) * 3.0 + safe(video.getSaveCount()) * 4.0) / (safe(video.getViewCount()) + 1.0);
+        double trendingScore = Math.log1p(safe(video.getViewCount()) + safe(video.getLikeCount()));
+        long hoursSinceCreated = java.time.temporal.ChronoUnit.HOURS.between(video.getCreatedAt() != null ? video.getCreatedAt() : LocalDateTime.now(), LocalDateTime.now());
+        double freshnessScore = Math.exp(-hoursSinceCreated / 24.0);
+        
+        long seed = video.getId() + (currentUser != null ? currentUser.getId() : 0L);
+        java.util.Random random = new java.util.Random(seed);
+        double explorationBoost = random.nextDouble();
+        
+        return 0.35 * trendingScore + 0.20 * trendingScore + 0.15 * interactionScore + 0.10 * 1.0 + 0.10 * trendingScore + 0.05 * freshnessScore + 0.05 * explorationBoost;
+    }
+
+    private double calculateFollowingScore(Video video, User currentUser) {
+        long hoursSinceCreated = java.time.temporal.ChronoUnit.HOURS.between(video.getCreatedAt() != null ? video.getCreatedAt() : LocalDateTime.now(), LocalDateTime.now());
+        double freshnessScore = Math.exp(-hoursSinceCreated / 48.0);
+        double creatorAffinity = 1.0;
+        double videoEngagement = (safe(video.getLikeCount()) * 1.0 + safe(video.getCommentCount()) * 2.0) / (safe(video.getViewCount()) + 1.0);
+        double completionPrediction = Math.log1p(safe(video.getViewCount()));
+        
+        long seed = video.getId() + (currentUser != null ? currentUser.getId() : 0L);
+        java.util.Random random = new java.util.Random(seed);
+        double randomDiversify = random.nextDouble();
+        
+        return 0.45 * freshnessScore + 0.25 * creatorAffinity + 0.15 * videoEngagement + 0.10 * completionPrediction + 0.05 * randomDiversify;
+    }
+
+    private double calculateFriendsScore(Video video, User currentUser) {
+        long hoursSinceCreated = java.time.temporal.ChronoUnit.HOURS.between(video.getCreatedAt() != null ? video.getCreatedAt() : LocalDateTime.now(), LocalDateTime.now());
+        double freshnessScore = Math.exp(-hoursSinceCreated / 48.0);
+        double relationshipStrength = 1.0;
+        double interactionHistory = 1.0;
+        double videoEngagement = (safe(video.getLikeCount()) * 1.0 + safe(video.getCommentCount()) * 2.0) / (safe(video.getViewCount()) + 1.0);
+        
+        long seed = video.getId() + (currentUser != null ? currentUser.getId() : 0L);
+        java.util.Random random = new java.util.Random(seed);
+        double randomDiversify = random.nextDouble();
+        
+        return 0.35 * relationshipStrength + 0.30 * freshnessScore + 0.20 * interactionHistory + 0.10 * videoEngagement + 0.05 * randomDiversify;
     }
 }

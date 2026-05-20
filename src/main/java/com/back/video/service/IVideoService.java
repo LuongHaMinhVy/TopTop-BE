@@ -18,9 +18,12 @@ public interface IVideoService {
     void reportVideo(Long id, String reason);
     VideoStatsResponseDTO likeVideo(Long id);
     VideoStatsResponseDTO unlikeVideo(Long id);
+    VideoStatsResponseDTO repostVideo(Long id);
+    VideoStatsResponseDTO unrepostVideo(Long id);
     VideoResponseDTO getVideoByUsernameAndId(String username, Long videoId);
     VideoResponseDTO updateVideo(Long id, VideoUploadRequestDTO requestDTO);
     Page<VideoResponseDTO> getLikedVideos(Pageable pageable);
+    Page<VideoResponseDTO> getRepostedVideosByUsername(String username, Pageable pageable);
     Page<VideoResponseDTO> getFollowingFeed(Pageable pageable);
     Page<VideoResponseDTO> getFriendsFeed(Pageable pageable);
 }

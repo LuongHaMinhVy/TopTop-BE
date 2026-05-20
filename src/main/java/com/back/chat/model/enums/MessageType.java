@@ -4,5 +4,6 @@ public enum MessageType {
     TEXT,
     VIDEO_SHARE,
     IMAGE,
+    VIDEO,
     SYSTEM
 }

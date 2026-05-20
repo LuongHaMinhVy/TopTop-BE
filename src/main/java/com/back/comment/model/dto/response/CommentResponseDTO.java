@@ -13,6 +13,8 @@ import java.time.LocalDateTime;
 public class CommentResponseDTO {
     private Long id;
     private String content;
+    private String mediaUrl;
+    private String mediaType;
     private Long userId;
     private String username;
     private String userAvatarUrl;

@@ -50,6 +50,8 @@ public class CommentServiceImpl implements ICommentService {
                 .user(user)
                 .video(video)
                 .content(normalizeContent(requestDTO.getContent()))
+                .mediaUrl(normalizeMediaUrl(requestDTO.getMediaUrl()))
+                .mediaType(normalizeMediaType(requestDTO.getMediaType()))
                 .timestampInVideo(requestDTO.getTimestampInVideo())
                 .status(CommentStatus.ACTIVE)
                 .likeCount(0L)
@@ -212,6 +214,8 @@ public class CommentServiceImpl implements ICommentService {
         return CommentResponseDTO.builder()
                 .id(comment.getId())
                 .content(deleted ? "" : comment.getContent())
+                .mediaUrl(deleted ? null : comment.getMediaUrl())
+                .mediaType(deleted ? null : comment.getMediaType())
                 .userId(comment.getUser().getId())
                 .username(comment.getUser().getUsername())
                 .userAvatarUrl(comment.getUser().getAvatarUrl())
@@ -260,7 +264,21 @@ public class CommentServiceImpl implements ICommentService {
 
     private String normalizeContent(String content) {
         String normalized = content == null ? "" : content.trim();
-        if (normalized.isBlank() || normalized.length() > 2000) {
+        if (normalized.length() > 2000) {
+            throw new AppException(ErrorCode.BAD_REQUEST);
+        }
+        return normalized;
+    }
+
+    private String normalizeMediaUrl(String mediaUrl) {
+        String normalized = mediaUrl == null ? "" : mediaUrl.trim();
+        return normalized.isBlank() ? null : normalized;
+    }
+
+    private String normalizeMediaType(String mediaType) {
+        String normalized = mediaType == null ? "" : mediaType.trim().toUpperCase();
+        if (normalized.isBlank()) return null;
+        if (!normalized.equals("IMAGE")) {
             throw new AppException(ErrorCode.BAD_REQUEST);
         }
         return normalized;

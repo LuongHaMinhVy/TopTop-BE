@@ -34,6 +34,12 @@ public class Comment {
     @Column(columnDefinition = "TEXT")
     private String content;
 
+    @Column(name = "media_url")
+    private String mediaUrl;
+
+    @Column(name = "media_type", length = 20)
+    private String mediaType;
+
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "parent_id")
     private Comment parent;

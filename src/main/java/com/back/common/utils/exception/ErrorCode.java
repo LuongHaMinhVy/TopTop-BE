@@ -72,6 +72,7 @@ public enum ErrorCode {
     COLLECTION_NOT_FOUND(HttpStatus.NOT_FOUND, "Collection not found"),
     COLLECTION_ALREADY_EXISTS(HttpStatus.CONFLICT, "Collection already exists"),
     COLLECTION_ACCESS_DENIED(HttpStatus.FORBIDDEN, "You do not have permission to access this collection"),
+    CHAT_ACCESS_DENIED(HttpStatus.FORBIDDEN, "You do not have permission to access this conversation"),
     
     INTERNAL_ERROR(HttpStatus.INTERNAL_SERVER_ERROR, "Internal server error");
     private final HttpStatus status;

@@ -24,6 +24,14 @@ public class SendMessageRequestDTO {
 
     private Long videoId;
 
+    private String mediaUrl;
+
+    private String mediaType;
+
+    private String fileName;
+
+    private Long fileSize;
+
     private Long replyToMessageId;
 
     @NotBlank

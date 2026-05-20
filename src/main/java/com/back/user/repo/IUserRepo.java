@@ -25,8 +25,14 @@ public interface IUserRepo extends JpaRepository<User, Long>{
 
     @Query("""
             SELECT u FROM User u
-            WHERE LOWER(u.username) LIKE LOWER(CONCAT('%', :keyword, '%'))
+            WHERE (
+                  LOWER(u.username) LIKE LOWER(CONCAT('%', :keyword, '%'))
                OR LOWER(u.nickname) LIKE LOWER(CONCAT('%', :keyword, '%'))
+            )
+              AND NOT EXISTS (
+                  SELECT r.id FROM u.roles r
+                  WHERE r.name = com.back.user.model.enums.RoleName.ROLE_ADMIN
+              )
             ORDER BY
                CASE WHEN LOWER(u.username) = LOWER(:keyword) THEN 0 ELSE 1 END,
                CASE WHEN LOWER(u.username) LIKE LOWER(CONCAT(:keyword, '%')) THEN 0 ELSE 1 END,
@@ -39,6 +45,10 @@ public interface IUserRepo extends JpaRepository<User, Long>{
     @Query("""
             SELECT u FROM User u
             WHERE (:viewerId IS NULL OR u.id <> :viewerId)
+              AND NOT EXISTS (
+                  SELECT r.id FROM u.roles r
+                  WHERE r.name = com.back.user.model.enums.RoleName.ROLE_ADMIN
+              )
               AND (:viewerId IS NULL OR NOT EXISTS (
                   SELECT f.id FROM Follow f
                   WHERE f.follower.id = :viewerId AND f.following.id = u.id
@@ -55,6 +65,10 @@ public interface IUserRepo extends JpaRepository<User, Long>{
     @Query("""
             SELECT u FROM User u
             WHERE u.id <> :viewerId
+              AND NOT EXISTS (
+                  SELECT r.id FROM u.roles r
+                  WHERE r.name = com.back.user.model.enums.RoleName.ROLE_ADMIN
+              )
               AND NOT EXISTS (
                   SELECT f.id FROM Follow f
                   WHERE f.follower.id = :viewerId AND f.following.id = u.id

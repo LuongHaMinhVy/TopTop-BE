@@ -16,11 +16,15 @@ import com.back.common.utils.exception.ErrorCode;
 import com.back.user.model.entity.User;
 import com.back.user.repo.IUserRepo;
 import com.back.video.model.dto.request.VideoResponseDTO;
+import com.back.video.model.dto.response.VideoRepostUserResponseDTO;
 import com.back.video.model.entity.Video;
 import com.back.video.repo.IVideoLikeRepository;
 import com.back.video.repo.IVideoRepository;
+import com.back.video.repo.IVideoRepostRepository;
+import com.back.follow.repo.IFollowRepo;
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.Page;
+import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
 import org.springframework.security.core.Authentication;
 import org.springframework.security.core.context.SecurityContextHolder;
@@ -42,6 +46,8 @@ public class CollectionServiceImpl implements ICollectionService {
     private final CollectionMapper collectionMapper;
     private final IUserBlockService userBlockService;
     private final IVideoLikeRepository videoLikeRepository;
+    private final IVideoRepostRepository videoRepostRepository;
+    private final IFollowRepo followRepo;
 
     @Override
     @Transactional(readOnly = true)
@@ -324,6 +330,7 @@ public class CollectionServiceImpl implements ICollectionService {
                     .likeCount(0L)
                     .commentCount(0L)
                     .saveCount(0L)
+                    .shareCount(0L)
                     .userId(video.getUser().getId())
                     .username(video.getUser().getUsername())
                     .userNickname(video.getUser().getNickname())
@@ -331,6 +338,8 @@ public class CollectionServiceImpl implements ICollectionService {
                     .createdAt(video.getCreatedAt())
                     .isSaved(false)
                     .isLiked(false)
+                    .isReposted(false)
+                    .repostedBy(List.of())
                     .allowComments(false)
                     .visibility(video.getVisibility() != null ? video.getVisibility().name() : "PUBLIC")
                     .deleted(true)
@@ -339,6 +348,7 @@ public class CollectionServiceImpl implements ICollectionService {
         }
 
         boolean isLiked = currentUser != null && videoLikeRepository.existsByUserIdAndVideoId(currentUser.getId(), video.getId());
+        boolean isReposted = currentUser != null && videoRepostRepository.existsByUserIdAndVideoId(currentUser.getId(), video.getId());
 
         return VideoResponseDTO.builder()
                 .id(video.getId())
@@ -352,6 +362,7 @@ public class CollectionServiceImpl implements ICollectionService {
                 .likeCount(video.getLikeCount())
                 .commentCount(video.getCommentCount())
                 .saveCount(getSaveCount(video))
+                .shareCount(videoRepostRepository.countByVideoId(video.getId()))
                 .userId(video.getUser().getId())
                 .username(video.getUser().getUsername())
                 .userNickname(video.getUser().getNickname())
@@ -359,6 +370,8 @@ public class CollectionServiceImpl implements ICollectionService {
                 .createdAt(video.getCreatedAt())
                 .isSaved(isSaved)
                 .isLiked(isLiked)
+                .isReposted(isReposted)
+                .repostedBy(mapRepostUsers(video, currentUser))
                 .allowComments(video.getAllowComments())
                 .visibility(video.getVisibility() != null ? video.getVisibility().name() : "PUBLIC")
                 .deleted(false)
@@ -368,5 +381,33 @@ public class CollectionServiceImpl implements ICollectionService {
 
     private Long getSaveCount(Video video) {
         return video.getSaveCount() == null ? 0L : video.getSaveCount();
+    }
+
+    private List<VideoRepostUserResponseDTO> mapRepostUsers(Video video, User currentUser) {
+        if (currentUser == null) {
+            return List.of();
+        }
+
+        return videoRepostRepository.findRecentByVideoId(video.getId(), PageRequest.of(0, 20)).stream()
+                .filter(repost -> shouldShowRepostUser(repost.getUser(), currentUser))
+                .limit(2)
+                .map(repost -> {
+                    User user = repost.getUser();
+                    return VideoRepostUserResponseDTO.builder()
+                            .id(user.getId())
+                            .username(user.getUsername())
+                            .nickname(user.getNickname())
+                            .avatarUrl(user.getAvatarUrl())
+                            .isCurrentUser(currentUser != null && currentUser.getId().equals(user.getId()))
+                            .build();
+                })
+                .toList();
+    }
+
+    private boolean shouldShowRepostUser(User repostUser, User currentUser) {
+        if (repostUser.getId().equals(currentUser.getId())) {
+            return true;
+        }
+        return followRepo.existsByFollowerAndFollowing(currentUser, repostUser);
     }
 }

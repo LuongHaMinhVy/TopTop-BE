@@ -6,6 +6,8 @@ import lombok.Data;
 import lombok.NoArgsConstructor;
 
 import java.time.LocalDateTime;
+import java.util.List;
+import com.back.video.model.dto.response.VideoRepostUserResponseDTO;
 
 @Data
 @Builder
@@ -23,6 +25,7 @@ public class VideoResponseDTO {
     private Long likeCount;
     private Long commentCount;
     private Long saveCount;
+    private Long shareCount;
     private Long userId;
     private String username;
     private String userNickname;
@@ -30,6 +33,8 @@ public class VideoResponseDTO {
     private LocalDateTime createdAt;
     private Boolean isSaved;
     private Boolean isLiked;
+    private Boolean isReposted;
+    private List<VideoRepostUserResponseDTO> repostedBy;
     private Boolean isFollowingAuthor;
     private Boolean allowComments;
     private String visibility;
