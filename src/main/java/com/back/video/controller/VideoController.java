@@ -3,6 +3,7 @@ package com.back.video.controller;
 import com.back.common.model.dto.response.ApiResponse;
 import com.back.common.utils.Translator;
 import com.back.video.model.dto.request.VideoResponseDTO;
+import com.back.video.model.dto.response.VideoDailyMetricResponseDTO;
 import com.back.video.model.dto.response.VideoStatsResponseDTO;
 import com.back.video.model.dto.response.VideoUploadRequestDTO;
 import com.back.video.service.IVideoService;
@@ -147,6 +148,29 @@ public class VideoController {
         VideoStatsResponseDTO data = videoService.unrepostVideo(id);
         return ResponseEntity.ok(ApiResponse.<VideoStatsResponseDTO>builder()
                 .message(Translator.toLocale("video.unrepost.success", "Video repost removed successfully"))
+                .data(data)
+                .status(HttpStatus.OK.value())
+                .timestamp(LocalDateTime.now())
+                .build());
+    }
+
+    @PostMapping("/{id}/view")
+    public ResponseEntity<ApiResponse<VideoStatsResponseDTO>> recordVideoView(@PathVariable Long id) {
+        VideoStatsResponseDTO data = videoService.recordVideoView(id);
+        return ResponseEntity.ok(ApiResponse.<VideoStatsResponseDTO>builder()
+                .message(Translator.toLocale("video.view.success", "Video view recorded successfully"))
+                .data(data)
+                .status(HttpStatus.OK.value())
+                .timestamp(LocalDateTime.now())
+                .build());
+    }
+
+    @GetMapping("/studio/analytics/views")
+    public ResponseEntity<ApiResponse<List<VideoDailyMetricResponseDTO>>> getStudioDailyViews(
+            @RequestParam(defaultValue = "7") int days) {
+        List<VideoDailyMetricResponseDTO> data = videoService.getStudioDailyViews(days);
+        return ResponseEntity.ok(ApiResponse.<List<VideoDailyMetricResponseDTO>>builder()
+                .message(Translator.toLocale("video.analytics.views.success", "Video view analytics retrieved successfully"))
                 .data(data)
                 .status(HttpStatus.OK.value())
                 .timestamp(LocalDateTime.now())

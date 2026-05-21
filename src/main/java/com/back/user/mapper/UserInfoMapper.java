@@ -3,21 +3,24 @@ package com.back.user.mapper;
 import com.back.user.model.dto.response.UserInfo;
 import com.back.user.model.dto.response.RelationshipStatus;
 import com.back.user.model.entity.User;
-import lombok.Getter;
-import lombok.Setter;
+import com.back.video.repo.IVideoRepository;
+import lombok.RequiredArgsConstructor;
+import org.springframework.stereotype.Component;
 
 import java.util.List;
 import java.util.stream.Collectors;
 
-@Getter
-@Setter
-public class UserInfoMapper{
+@Component
+@RequiredArgsConstructor
+public class UserInfoMapper {
 
-    public static UserInfo buildUserInfo(User user) {
+    private final IVideoRepository videoRepository;
+
+    public UserInfo buildUserInfo(User user) {
         return buildUserInfo(user, null);
     }
 
-    public static UserInfo buildUserInfo(User user, RelationshipStatus relationship) {
+    public UserInfo buildUserInfo(User user, RelationshipStatus relationship) {
         List<String> roles = user.getRoles().stream()
                 .map(role -> role.getName().name())
                 .collect(Collectors.toList());
@@ -33,7 +36,7 @@ public class UserInfoMapper{
                 .followersCount(user.getFollowersCount())
                 .followingCount(user.getFollowingCount())
                 .totalLikes(user.getTotalLikes())
-                .videoCount(user.getVideoCount())
+                .videoCount(videoRepository.countByUserIdAndDeletedAtIsNull(user.getId()))
                 .verified(user.getVerified())
                 .isPrivate(user.getIsPrivate())
                 .status(user.getStatus().name())

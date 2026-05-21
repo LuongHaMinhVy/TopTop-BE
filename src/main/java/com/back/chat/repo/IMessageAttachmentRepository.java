@@ -8,6 +8,8 @@ import org.springframework.stereotype.Repository;
 import java.util.Optional;
 
 @Repository
-public interface MessageAttachmentRepository extends JpaRepository<MessageAttachment, Long> {
+public interface IMessageAttachmentRepository extends JpaRepository<MessageAttachment, Long> {
     Optional<MessageAttachment> findByMessage(Message message);
+
+    long countByTypeAndVideoId(String type, Long videoId);
 }

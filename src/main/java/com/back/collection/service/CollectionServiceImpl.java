@@ -7,9 +7,9 @@ import com.back.collection.model.dto.response.CollectionResponseDTO;
 import com.back.collection.model.entity.CollectionVideo;
 import com.back.collection.model.entity.SavedVideo;
 import com.back.collection.model.entity.VideoCollection;
-import com.back.collection.repo.CollectionVideoRepository;
-import com.back.collection.repo.SavedVideoRepository;
-import com.back.collection.repo.VideoCollectionRepository;
+import com.back.collection.repo.ICollectionVideoRepository;
+import com.back.collection.repo.ISavedVideoRepository;
+import com.back.collection.repo.IVideoCollectionRepository;
 import com.back.block.service.IUserBlockService;
 import com.back.common.utils.exception.AppException;
 import com.back.common.utils.exception.ErrorCode;
@@ -38,9 +38,9 @@ import java.util.List;
 @RequiredArgsConstructor
 public class CollectionServiceImpl implements ICollectionService {
 
-    private final SavedVideoRepository savedVideoRepository;
-    private final VideoCollectionRepository videoCollectionRepository;
-    private final CollectionVideoRepository collectionVideoRepository;
+    private final ISavedVideoRepository ISavedVideoRepository;
+    private final IVideoCollectionRepository IVideoCollectionRepository;
+    private final ICollectionVideoRepository ICollectionVideoRepository;
     private final IVideoRepository videoRepository;
     private final IUserRepo userRepo;
     private final CollectionMapper collectionMapper;
@@ -53,7 +53,7 @@ public class CollectionServiceImpl implements ICollectionService {
     @Transactional(readOnly = true)
     public Page<VideoResponseDTO> getFavoriteVideos(Pageable pageable) {
         User user = getCurrentUserOrThrow();
-        return savedVideoRepository.findVisibleByUserIdOrderByCreatedAtDesc(user.getId(), pageable)
+        return ISavedVideoRepository.findVisibleByUserIdOrderByCreatedAtDesc(user.getId(), pageable)
                 .map(savedVideo -> mapToVideoResponseDTO(savedVideo.getVideo(), user, true));
     }
 
@@ -64,8 +64,8 @@ public class CollectionServiceImpl implements ICollectionService {
         Video video = getVideoOrThrow(videoId);
         userBlockService.assertNotBlockedEitherWay(user, video.getUser());
 
-        if (!savedVideoRepository.existsByUserIdAndVideoId(user.getId(), videoId)) {
-            savedVideoRepository.save(SavedVideo.builder()
+        if (!ISavedVideoRepository.existsByUserIdAndVideoId(user.getId(), videoId)) {
+            ISavedVideoRepository.save(SavedVideo.builder()
                     .user(user)
                     .video(video)
                     .build());
@@ -83,10 +83,10 @@ public class CollectionServiceImpl implements ICollectionService {
         Video video = getVideoOrThrow(videoId);
         userBlockService.assertNotBlockedEitherWay(user, video.getUser());
 
-        savedVideoRepository.findByUserIdAndVideoId(user.getId(), videoId)
+        ISavedVideoRepository.findByUserIdAndVideoId(user.getId(), videoId)
                 .ifPresent(savedVideo -> {
-                    collectionVideoRepository.deleteByVideoIdAndCollectionUserId(videoId, user.getId());
-                    savedVideoRepository.delete(savedVideo);
+                    ICollectionVideoRepository.deleteByVideoIdAndCollectionUserId(videoId, user.getId());
+                    ISavedVideoRepository.delete(savedVideo);
                     if (getSaveCount(video) > 0) {
                         video.setSaveCount(getSaveCount(video) - 1);
                         videoRepository.save(video);
@@ -100,7 +100,7 @@ public class CollectionServiceImpl implements ICollectionService {
     @Transactional(readOnly = true)
     public List<CollectionResponseDTO> getCollections() {
         User user = getCurrentUserOrThrow();
-        return videoCollectionRepository.findByUserIdOrderByCreatedAtDesc(user.getId())
+        return IVideoCollectionRepository.findByUserIdOrderByCreatedAtDesc(user.getId())
                 .stream()
                 .map(collectionMapper::toResponseDTO)
                 .toList();
@@ -116,8 +116,8 @@ public class CollectionServiceImpl implements ICollectionService {
 
         boolean isOwner = currentUser != null && currentUser.getId().equals(owner.getId());
         List<VideoCollection> collections = isOwner
-                ? videoCollectionRepository.findByUserIdOrderByCreatedAtDesc(owner.getId())
-                : videoCollectionRepository.findByUserIdAndIsPublicTrueOrderByCreatedAtDesc(owner.getId());
+                ? IVideoCollectionRepository.findByUserIdOrderByCreatedAtDesc(owner.getId())
+                : IVideoCollectionRepository.findByUserIdAndIsPublicTrueOrderByCreatedAtDesc(owner.getId());
 
         return collections.stream()
                 .map(collectionMapper::toResponseDTO)
@@ -137,11 +137,11 @@ public class CollectionServiceImpl implements ICollectionService {
         User user = getCurrentUserOrThrow();
         String name = requestDTO.getName().trim();
 
-        if (videoCollectionRepository.existsByUserIdAndNameIgnoreCase(user.getId(), name)) {
+        if (IVideoCollectionRepository.existsByUserIdAndNameIgnoreCase(user.getId(), name)) {
             throw new AppException(ErrorCode.COLLECTION_ALREADY_EXISTS, "name");
         }
 
-        VideoCollection collection = videoCollectionRepository.save(VideoCollection.builder()
+        VideoCollection collection = IVideoCollectionRepository.save(VideoCollection.builder()
                 .user(user)
                 .name(name)
                 .description(normalizeDescription(requestDTO.getDescription()))
@@ -158,7 +158,7 @@ public class CollectionServiceImpl implements ICollectionService {
         VideoCollection collection = getOwnedCollectionOrThrow(collectionId, user.getId());
         String name = requestDTO.getName().trim();
 
-        if (videoCollectionRepository.existsByUserIdAndNameIgnoreCaseAndIdNot(user.getId(), name, collectionId)) {
+        if (IVideoCollectionRepository.existsByUserIdAndNameIgnoreCaseAndIdNot(user.getId(), name, collectionId)) {
             throw new AppException(ErrorCode.COLLECTION_ALREADY_EXISTS, "name");
         }
 
@@ -168,7 +168,7 @@ public class CollectionServiceImpl implements ICollectionService {
             collection.setIsPublic(requestDTO.getIsPublic());
         }
 
-        return collectionMapper.toResponseDTO(videoCollectionRepository.save(collection));
+        return collectionMapper.toResponseDTO(IVideoCollectionRepository.save(collection));
     }
 
     @Override
@@ -177,8 +177,8 @@ public class CollectionServiceImpl implements ICollectionService {
         User user = getCurrentUserOrThrow();
         VideoCollection collection = getOwnedCollectionOrThrow(collectionId, user.getId());
 
-        collectionVideoRepository.deleteByCollectionId(collection.getId());
-        videoCollectionRepository.delete(collection);
+        ICollectionVideoRepository.deleteByCollectionId(collection.getId());
+        IVideoCollectionRepository.delete(collection);
     }
 
     @Override
@@ -187,7 +187,7 @@ public class CollectionServiceImpl implements ICollectionService {
         User user = getCurrentUserOrThrow();
         VideoCollection collection = getOwnedCollectionOrThrow(collectionId, user.getId());
 
-        return collectionVideoRepository.findVisibleByCollectionIdOrderByAddedAtDesc(collection.getId(), user.getId(), pageable)
+        return ICollectionVideoRepository.findVisibleByCollectionIdOrderByAddedAtDesc(collection.getId(), user.getId(), pageable)
                 .map(collectionVideo -> mapToVideoResponseDTO(collectionVideo.getVideo(), user, true));
     }
 
@@ -196,7 +196,7 @@ public class CollectionServiceImpl implements ICollectionService {
     public Page<VideoResponseDTO> getUserCollectionVideos(String username, Long collectionId, Pageable pageable) {
         VideoCollection collection = getCollectionForProfileOrThrow(username, collectionId);
         User currentUser = getCurrentUserOrNull();
-        return collectionVideoRepository.findVisibleByCollectionIdForViewerOrderByAddedAtDesc(
+        return ICollectionVideoRepository.findVisibleByCollectionIdForViewerOrderByAddedAtDesc(
                         collection.getId(),
                         collection.getUser().getId(),
                         currentUser == null ? null : currentUser.getId(),
@@ -204,7 +204,7 @@ public class CollectionServiceImpl implements ICollectionService {
                 .map(collectionVideo -> mapToVideoResponseDTO(
                         collectionVideo.getVideo(),
                         currentUser,
-                        currentUser != null && savedVideoRepository.existsByUserIdAndVideoId(
+                        currentUser != null && ISavedVideoRepository.existsByUserIdAndVideoId(
                                 currentUser.getId(),
                                 collectionVideo.getVideo().getId())));
     }
@@ -219,8 +219,8 @@ public class CollectionServiceImpl implements ICollectionService {
 
         saveVideo(videoId);
 
-        if (!collectionVideoRepository.existsByCollectionIdAndVideoId(collection.getId(), videoId)) {
-            collectionVideoRepository.save(CollectionVideo.builder()
+        if (!ICollectionVideoRepository.existsByCollectionIdAndVideoId(collection.getId(), videoId)) {
+            ICollectionVideoRepository.save(CollectionVideo.builder()
                     .collection(collection)
                     .video(video)
                     .build());
@@ -235,8 +235,8 @@ public class CollectionServiceImpl implements ICollectionService {
         User user = getCurrentUserOrThrow();
         VideoCollection collection = getOwnedCollectionOrThrow(collectionId, user.getId());
 
-        collectionVideoRepository.findByCollectionIdAndVideoId(collection.getId(), videoId)
-                .ifPresent(collectionVideoRepository::delete);
+        ICollectionVideoRepository.findByCollectionIdAndVideoId(collection.getId(), videoId)
+                .ifPresent(ICollectionVideoRepository::delete);
     }
 
     private Video getVideoOrThrow(Long videoId) {
@@ -249,12 +249,12 @@ public class CollectionServiceImpl implements ICollectionService {
     }
 
     private VideoCollection getOwnedCollectionOrThrow(Long collectionId, Long userId) {
-        return videoCollectionRepository.findByIdAndUserId(collectionId, userId)
+        return IVideoCollectionRepository.findByIdAndUserId(collectionId, userId)
                 .orElseThrow(() -> new AppException(ErrorCode.COLLECTION_NOT_FOUND));
     }
 
     private VideoCollection getCollectionForProfileOrThrow(String username, Long collectionId) {
-        VideoCollection collection = videoCollectionRepository.findByIdAndUserUsernameIgnoreCase(collectionId, username)
+        VideoCollection collection = IVideoCollectionRepository.findByIdAndUserUsernameIgnoreCase(collectionId, username)
                 .orElseThrow(() -> new AppException(ErrorCode.COLLECTION_NOT_FOUND));
 
         User currentUser = getCurrentUserOrNull();

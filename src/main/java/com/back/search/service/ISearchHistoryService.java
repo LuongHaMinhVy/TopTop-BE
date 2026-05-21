@@ -6,7 +6,7 @@ import org.springframework.security.core.Authentication;
 
 import java.util.List;
 
-public interface SearchHistoryService {
+public interface ISearchHistoryService{
     List<SearchHistoryResponseDTO> getMyHistory(Authentication authentication);
 
     SearchHistoryResponseDTO save(Authentication authentication, SaveSearchHistoryRequestDTO request);

@@ -1,6 +1,7 @@
 package com.back.auth.controller;
 
 import com.back.auth.model.dto.response.AuthResponse;
+import com.back.common.service.cookieservice.ICookieService;
 import com.back.common.utils.exception.AppException;
 import com.back.common.utils.exception.ErrorCode;
 import com.back.config.OAuth2StateCache;
@@ -14,7 +15,7 @@ import org.springframework.web.bind.annotation.*;
 public class OAuth2CallbackController {
 
     private final OAuth2StateCache oAuth2StateCache;
-    private final com.back.common.service.cookieservice.CookieService cookieService;
+    private final ICookieService ICookieService;
 
     @org.springframework.beans.factory.annotation.Value("${jwt.access-token-expiration}")
     private Long accessTokenExpiration;
@@ -31,11 +32,11 @@ public class OAuth2CallbackController {
 
         // Set cookies with the correct X-App-Id suffix (if provided in header/param)
         if (authResponse.getAccessToken() != null) {
-            cookieService.add(response, "accessToken", authResponse.getAccessToken(),
+            ICookieService.add(response, "accessToken", authResponse.getAccessToken(),
                     (int)(accessTokenExpiration / 1000), request);
         }
         if (authResponse.getRefreshToken() != null) {
-            cookieService.add(response, "refreshToken", authResponse.getRefreshToken(),
+            ICookieService.add(response, "refreshToken", authResponse.getRefreshToken(),
                     (int)(refreshTokenExpiration / 1000), request);
         }
 

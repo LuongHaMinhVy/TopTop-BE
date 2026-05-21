@@ -28,6 +28,7 @@ public class FollowServiceImpl implements IFollowService {
     private final IFollowRepo followRepo;
     private final IUserRepo userRepo;
     private final IUserBlockRepo userBlockRepo;
+    private final UserInfoMapper userInfoMapper;
 
     private User getCurrentUser() {
         Authentication authentication = SecurityContextHolder.getContext().getAuthentication();
@@ -125,6 +126,6 @@ public class FollowServiceImpl implements IFollowService {
         if (currentUser == null) return Page.empty();
 
         return followRepo.findByFollower(currentUser, pageable)
-                .map(follow -> UserInfoMapper.buildUserInfo(follow.getFollowing()));
+                .map(follow -> userInfoMapper.buildUserInfo(follow.getFollowing()));
     }
 }

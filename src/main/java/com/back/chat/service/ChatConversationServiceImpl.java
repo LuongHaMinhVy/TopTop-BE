@@ -8,8 +8,9 @@ import com.back.chat.model.entity.Conversation;
 import com.back.chat.model.entity.ConversationParticipant;
 import com.back.chat.model.enums.ConversationStatus;
 import com.back.chat.model.enums.ConversationType;
-import com.back.chat.repo.ConversationParticipantRepository;
-import com.back.chat.repo.ConversationRepository;
+import com.back.chat.repo.IConversationParticipantRepository;
+import com.back.chat.repo.IConversationRepository;
+import com.back.chat.repo.IMessageRepository;
 import com.back.common.utils.exception.AppException;
 import com.back.common.utils.exception.ErrorCode;
 import com.back.follow.repo.IFollowRepo;
@@ -30,8 +31,9 @@ import java.util.Optional;
 @RequiredArgsConstructor
 public class ChatConversationServiceImpl implements IChatConversationService {
 
-    private final ConversationRepository conversationRepository;
-    private final ConversationParticipantRepository participantRepository;
+    private final IConversationRepository IConversationRepository;
+    private final IConversationParticipantRepository participantRepository;
+    private final IMessageRepository messageRepository;
     private final IUserRepo userRepo;
     private final IFollowRepo followRepo;
 
@@ -56,7 +58,12 @@ public class ChatConversationServiceImpl implements IChatConversationService {
         return conversations.map(conv -> {
             ConversationParticipant currentParticipant = participantRepository.findByConversationAndUser(conv, currentUser).orElse(null);
             ConversationParticipant targetParticipant = participantRepository.findTargetParticipant(conv, currentUser).orElse(null);
-            return ConversationMapper.toResponse(conv, currentParticipant, targetParticipant);
+            return ConversationMapper.toResponse(
+                    conv,
+                    currentParticipant,
+                    targetParticipant,
+                    countUnreadIncomingMessages(conv, currentUser, currentParticipant)
+            );
         });
     }
 
@@ -72,17 +79,22 @@ public class ChatConversationServiceImpl implements IChatConversationService {
         }
 
         String directKey = generateDirectKey(currentUser.getId(), targetUser.getId());
-        Optional<Conversation> existing = conversationRepository.findByDirectKey(directKey);
+        Optional<Conversation> existing = IConversationRepository.findByDirectKey(directKey);
 
         if (existing.isPresent()) {
             Conversation conv = existing.get();
             if (conv.getStatus() == ConversationStatus.REQUESTED && areFriends(currentUser, targetUser)) {
                 conv.setStatus(ConversationStatus.ACTIVE);
-                conv = conversationRepository.save(conv);
+                conv = IConversationRepository.save(conv);
             }
             ConversationParticipant currentParticipant = participantRepository.findByConversationAndUser(conv, currentUser).orElse(null);
             ConversationParticipant targetParticipant = participantRepository.findByConversationAndUser(conv, targetUser).orElse(null);
-            return ConversationMapper.toResponse(conv, currentParticipant, targetParticipant);
+            return ConversationMapper.toResponse(
+                    conv,
+                    currentParticipant,
+                    targetParticipant,
+                    countUnreadIncomingMessages(conv, currentUser, currentParticipant)
+            );
         }
 
         Conversation conversation = Conversation.builder()
@@ -91,7 +103,7 @@ public class ChatConversationServiceImpl implements IChatConversationService {
                 .directKey(directKey)
                 .createdBy(currentUser.getId())
                 .build();
-        conversation = conversationRepository.save(conversation);
+        conversation = IConversationRepository.save(conversation);
 
         ConversationParticipant p1 = ConversationParticipant.builder()
                 .conversation(conversation)
@@ -107,14 +119,14 @@ public class ChatConversationServiceImpl implements IChatConversationService {
                 .build();
         participantRepository.save(p2);
 
-        return ConversationMapper.toResponse(conversation, p1, p2);
+        return ConversationMapper.toResponse(conversation, p1, p2, 0L);
     }
 
     @Override
     @Transactional
     public void markAsRead(Authentication authentication, Long conversationId) {
         User currentUser = getCurrentUser(authentication);
-        Conversation conversation = conversationRepository.findById(conversationId)
+        Conversation conversation = IConversationRepository.findById(conversationId)
                 .orElseThrow(() -> new AppException(ErrorCode.FILE_NOT_FOUND));
 
         participantRepository.findByConversationAndUser(conversation, currentUser).ifPresent(participant -> {
@@ -169,5 +181,12 @@ public class ChatConversationServiceImpl implements IChatConversationService {
     private boolean areFriends(User firstUser, User secondUser) {
         return followRepo.existsByFollowerAndFollowing(firstUser, secondUser)
                 && followRepo.existsByFollowerAndFollowing(secondUser, firstUser);
+    }
+
+    private long countUnreadIncomingMessages(Conversation conversation, User currentUser, ConversationParticipant participant) {
+        if (conversation == null || currentUser == null || participant == null) {
+            return 0L;
+        }
+        return messageRepository.countUnreadIncomingMessages(conversation, currentUser, participant.getLastReadAt());
     }
 }

@@ -1,6 +1,6 @@
 package com.back.common.service;
 
-import com.back.config.cloudflare.CloudflareR2Properties;
+import com.back.config.cloudflare.RCloudflareR2Properties;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
@@ -28,7 +28,7 @@ public class R2StorageService {
     private final S3Client s3Client;
     private final S3TransferManager transferManager;
     private final S3Presigner s3Presigner;
-    private final CloudflareR2Properties props;
+    private final RCloudflareR2Properties props;
 
     public String uploadFile(MultipartFile file, String key) throws IOException {
         if (file.getSize() >= MULTIPART_THRESHOLD) {

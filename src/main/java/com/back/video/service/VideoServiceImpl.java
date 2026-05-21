@@ -1,25 +1,34 @@
 package com.back.video.service;
 
-import com.back.collection.repo.SavedVideoRepository;
-import com.back.collection.repo.CollectionVideoRepository;
+import com.back.collection.repo.ISavedVideoRepository;
+import com.back.collection.repo.ICollectionVideoRepository;
+import com.back.chat.repo.IMessageAttachmentRepository;
 import com.back.notification.service.INotificationService;
 
 import com.back.block.service.IUserBlockService;
 import com.back.common.service.R2StorageService;
 import com.back.common.utils.exception.AppException;
 import com.back.common.utils.exception.ErrorCode;
+import com.back.sound.mapper.SoundMapper;
+import com.back.sound.model.entity.Sound;
+import com.back.sound.model.enums.SoundType;
+import com.back.sound.repo.ISoundRepository;
+import com.back.sound.service.IAudioProcessingService;
 import com.back.user.model.entity.User;
 import com.back.user.repo.IUserRepo;
 import com.back.video.model.dto.request.VideoResponseDTO;
+import com.back.video.model.dto.response.VideoDailyMetricResponseDTO;
 import com.back.video.model.dto.response.VideoRepostUserResponseDTO;
 import com.back.video.model.dto.response.VideoStatsResponseDTO;
 import com.back.video.model.dto.response.VideoUploadRequestDTO;
 import com.back.video.model.entity.Video;
 import com.back.video.model.entity.VideoLike;
 import com.back.video.model.entity.VideoRepost;
+import com.back.video.model.entity.VideoView;
 import com.back.video.repo.IVideoLikeRepository;
 import com.back.video.repo.IVideoRepository;
 import com.back.video.repo.IVideoRepostRepository;
+import com.back.video.repo.IVideoViewRepository;
 import com.back.hashtag.repo.IHashtagRepository;
 import com.back.hashtag.model.entity.Hashtag;
 import com.back.video.model.enums.VideoVisibility;
@@ -40,6 +49,10 @@ import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.time.LocalDateTime;
+import java.time.LocalDate;
+import java.time.LocalTime;
+import java.util.ArrayList;
+import java.util.Map;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
@@ -58,10 +71,15 @@ public class VideoServiceImpl implements IVideoService {
     private final IUserRepo userRepo;
     private final R2StorageService storageService;
     private final IHashtagRepository hashtagRepo;
-    private final SavedVideoRepository savedVideoRepository;
-    private final CollectionVideoRepository collectionVideoRepository;
+    private final ISavedVideoRepository ISavedVideoRepository;
+    private final ICollectionVideoRepository ICollectionVideoRepository;
     private final IUserBlockService userBlockService;
     private final com.back.follow.repo.IFollowRepo followRepo;
+    private final ISoundRepository soundRepository;
+    private final SoundMapper soundMapper;
+    private final IAudioProcessingService audioProcessingService;
+    private final IMessageAttachmentRepository messageAttachmentRepository;
+    private final IVideoViewRepository videoViewRepository;
 
     @Override
     public VideoResponseDTO uploadVideo(MultipartFile file, MultipartFile cover, VideoUploadRequestDTO requestDTO) throws IOException {
@@ -107,6 +125,8 @@ public class VideoServiceImpl implements IVideoService {
             }
         }
 
+        Sound selectedSound = resolveSelectedSound(requestDTO.getSoundId());
+
         Video video = Video.builder()
                 .title(requestDTO.getTitle())
                 .description(requestDTO.getDescription())
@@ -119,9 +139,18 @@ public class VideoServiceImpl implements IVideoService {
                 .visibility(requestDTO.getVisibility() != null ? VideoVisibility.valueOf(requestDTO.getVisibility()) : VideoVisibility.PUBLIC)
                 .allowComments(requestDTO.getAllowComments() != null ? requestDTO.getAllowComments() : true)
                 .allowEdit(requestDTO.getAllowEdit() != null ? requestDTO.getAllowEdit() : false)
+                .sound(selectedSound)
                 .build();
 
         video = videoRepository.save(video);
+
+        if (selectedSound == null) {
+            Sound originalSound = createOriginalSound(video, user, file, url, duration);
+            video.setSound(originalSound);
+            video = videoRepository.save(video);
+        } else {
+            soundRepository.incrementUsageCount(selectedSound.getId());
+        }
 
         return mapToResponseDTO(video);
     }
@@ -173,6 +202,9 @@ public class VideoServiceImpl implements IVideoService {
         }
 
         video.setDeletedAt(LocalDateTime.now());
+        if (video.getSound() != null) {
+            soundRepository.decrementUsageCount(video.getSound().getId());
+        }
         videoRepository.save(video);
     }
 
@@ -306,10 +338,57 @@ public class VideoServiceImpl implements IVideoService {
         userBlockService.assertNotBlockedEitherWay(currentUser, video.getUser());
         checkVisibilityOrThrow(video, currentUser);
 
-        video.setViewCount(video.getViewCount() + 1);
-        videoRepository.save(video);
-        
         return mapToResponseDTO(video);
+    }
+
+    @Override
+    @Transactional
+    public VideoStatsResponseDTO recordVideoView(Long id) {
+        Video video = videoRepository.findById(id)
+                .orElseThrow(() -> new AppException(ErrorCode.VIDEO_NOT_FOUND));
+        if (video.isDeleted()) {
+            throw new AppException(ErrorCode.VIDEO_NOT_FOUND);
+        }
+
+        User currentUser = getCurrentUser();
+        userBlockService.assertNotBlockedEitherWay(currentUser, video.getUser());
+        checkVisibilityOrThrow(video, currentUser);
+
+        recordView(video, currentUser);
+        return mapToStatsDTO(video, currentUser != null && videoLikeRepository.existsByUserIdAndVideoId(currentUser.getId(), id));
+    }
+
+    @Override
+    public List<VideoDailyMetricResponseDTO> getStudioDailyViews(int days) {
+        User currentUser = getCurrentUser();
+        if (currentUser == null) {
+            throw new AppException(ErrorCode.UNAUTHORIZED);
+        }
+
+        int safeDays = Math.max(1, Math.min(days, 60));
+        LocalDate today = LocalDate.now();
+        LocalDate startDate = today.minusDays(safeDays - 1L);
+        LocalDateTime start = startDate.atStartOfDay();
+        LocalDateTime end = today.atTime(LocalTime.MAX);
+
+        Map<LocalDate, Long> countsByDate = videoViewRepository
+                .findByOwnerIdAndCreatedAtBetween(currentUser.getId(), start, end)
+                .stream()
+                .collect(java.util.stream.Collectors.groupingBy(
+                        view -> view.getCreatedAt().toLocalDate(),
+                        java.util.stream.Collectors.counting()
+                ));
+
+        List<VideoDailyMetricResponseDTO> result = new ArrayList<>();
+        for (int i = 0; i < safeDays; i++) {
+            LocalDate date = startDate.plusDays(i);
+            result.add(VideoDailyMetricResponseDTO.builder()
+                    .date(date)
+                    .views(countsByDate.getOrDefault(date, 0L))
+                    .build());
+        }
+
+        return result;
     }
 
     @Scheduled(cron = "0 0 3 * * *")
@@ -322,8 +401,8 @@ public class VideoServiceImpl implements IVideoService {
             try {
                 String key = storageService.extractKeyFromUrl(video.getFileUrl());
                 storageService.deleteFile(key);
-                collectionVideoRepository.deleteByVideoId(video.getId());
-                savedVideoRepository.deleteByVideoId(video.getId());
+                ICollectionVideoRepository.deleteByVideoId(video.getId());
+                ISavedVideoRepository.deleteByVideoId(video.getId());
                 videoRepostRepository.deleteByVideoId(video.getId());
                 videoRepository.delete(video);
                 log.info("Hard deleted video id={}", video.getId());
@@ -391,6 +470,40 @@ public class VideoServiceImpl implements IVideoService {
         }
     }
 
+    private Sound resolveSelectedSound(Long soundId) {
+        if (soundId == null) return null;
+
+        Sound sound = soundRepository.findByIdAndIsDeletedFalse(soundId)
+                .orElseThrow(() -> new AppException(ErrorCode.SOUND_NOT_FOUND));
+
+        if (!Boolean.TRUE.equals(sound.getIsActive()) || !Boolean.TRUE.equals(sound.getIsPublic())) {
+            throw new AppException(ErrorCode.SOUND_NOT_FOUND);
+        }
+
+        return sound;
+    }
+
+    private Sound createOriginalSound(Video video, User user, MultipartFile file, String videoUrl, Integer duration) {
+        String audioUrl = audioProcessingService.extractAudioUrl(file, videoUrl);
+        Sound sound = Sound.builder()
+                .title("original sound - @" + user.getUsername())
+                .artistName(user.getNickname() != null ? user.getNickname() : user.getUsername())
+                .description(video.getDescription())
+                .type(SoundType.ORIGINAL)
+                .audioUrl(audioUrl)
+                .coverUrl(video.getThumbnailUrl())
+                .durationSeconds(duration == null ? 0 : duration)
+                .owner(user)
+                .sourceVideo(video)
+                .usageCount(1L)
+                .isPublic(true)
+                .isActive(true)
+                .isDeleted(false)
+                .build();
+
+        return soundRepository.save(sound);
+    }
+
     private VideoResponseDTO mapToResponseDTO(Video video) {
         User currentUser = getCurrentUser();
         if (video.isDeleted()) {
@@ -421,15 +534,16 @@ public class VideoServiceImpl implements IVideoService {
                     .visibility(video.getVisibility() != null ? video.getVisibility().name() : "PUBLIC")
                     .deleted(true)
                     .unavailable(true)
+                    .sound(soundMapper.toResponseDTO(video.getSound()))
                     .build();
         }
-        boolean isSaved = currentUser != null && savedVideoRepository.existsByUserIdAndVideoId(currentUser.getId(), video.getId());
+        boolean isSaved = currentUser != null && ISavedVideoRepository.existsByUserIdAndVideoId(currentUser.getId(), video.getId());
         boolean isLiked = currentUser != null && videoLikeRepository.existsByUserIdAndVideoId(currentUser.getId(), video.getId());
         boolean isReposted = currentUser != null && videoRepostRepository.existsByUserIdAndVideoId(currentUser.getId(), video.getId());
         boolean isFollowingAuthor = currentUser != null
                 && !currentUser.getId().equals(video.getUser().getId())
                 && followRepo.existsByFollowerAndFollowing(currentUser, video.getUser());
-        long repostCount = videoRepostRepository.countByVideoId(video.getId());
+        long shareCount = getShareCount(video.getId());
 
         return VideoResponseDTO.builder()
                 .id(video.getId())
@@ -443,7 +557,7 @@ public class VideoServiceImpl implements IVideoService {
                 .likeCount(video.getLikeCount())
                 .commentCount(video.getCommentCount())
                 .saveCount(video.getSaveCount() == null ? 0L : video.getSaveCount())
-                .shareCount(repostCount)
+                .shareCount(shareCount)
                 .userId(video.getUser().getId())
                 .username(video.getUser().getUsername())
                 .userNickname(video.getUser().getNickname())
@@ -458,6 +572,7 @@ public class VideoServiceImpl implements IVideoService {
                 .visibility(video.getVisibility() != null ? video.getVisibility().name() : "PUBLIC")
                 .deleted(false)
                 .unavailable(false)
+                .sound(soundMapper.toResponseDTO(video.getSound()))
                 .build();
     }
 
@@ -467,10 +582,11 @@ public class VideoServiceImpl implements IVideoService {
         return VideoStatsResponseDTO.builder()
                 .videoId(video.getId())
                 .liked(liked)
+                .viewCount(safe(video.getViewCount()))
                 .likeCount(safe(video.getLikeCount()))
                 .commentCount(safe(video.getCommentCount()))
                 .saveCount(safe(video.getSaveCount()))
-                .shareCount(videoRepostRepository.countByVideoId(video.getId()))
+                .shareCount(getShareCount(video.getId()))
                 .reposted(isReposted)
                 .repostedBy(mapRepostUsers(video, currentUser))
                 .build();
@@ -486,6 +602,22 @@ public class VideoServiceImpl implements IVideoService {
                 .limit(2)
                 .map(repost -> mapRepostUser(repost.getUser(), currentUser))
                 .toList();
+    }
+
+    private long getShareCount(Long videoId) {
+        return videoRepostRepository.countByVideoId(videoId)
+                + messageAttachmentRepository.countByTypeAndVideoId("VIDEO_POST", videoId);
+    }
+
+    private void recordView(Video video, User viewer) {
+        videoViewRepository.save(VideoView.builder()
+                .video(video)
+                .owner(video.getUser())
+                .viewer(viewer)
+                .build());
+
+        video.setViewCount(safe(video.getViewCount()) + 1);
+        videoRepository.save(video);
     }
 
     private boolean shouldShowRepostUser(User repostUser, User currentUser) {

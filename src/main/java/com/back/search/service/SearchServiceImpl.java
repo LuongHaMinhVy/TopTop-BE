@@ -5,8 +5,8 @@ import com.back.search.mapper.SearchMapper;
 import com.back.search.model.dto.response.*;
 import com.back.search.model.entity.SearchHistory;
 import com.back.search.model.entity.SearchKeywordStat;
-import com.back.search.repo.SearchHistoryRepository;
-import com.back.search.repo.SearchKeywordStatRepository;
+import com.back.search.repo.ISearchHistoryRepository;
+import com.back.search.repo.ISearchKeywordStatRepository;
 import com.back.user.model.entity.User;
 import com.back.user.repo.IUserRepo;
 import com.back.video.model.entity.Video;
@@ -27,12 +27,12 @@ import java.util.Optional;
 
 @Service
 @RequiredArgsConstructor
-public class SearchServiceImpl implements SearchService {
+public class SearchServiceImpl implements ISearchService{
     private final IUserRepo userRepo;
     private final IVideoRepository videoRepository;
     private final IFollowRepo followRepo;
-    private final SearchHistoryRepository historyRepository;
-    private final SearchKeywordStatRepository keywordStatRepository;
+    private final ISearchHistoryRepository historyRepository;
+    private final ISearchKeywordStatRepository keywordStatRepository;
 
     @Override
     public SearchTopResponseDTO searchTop(String keyword, Authentication authentication) {

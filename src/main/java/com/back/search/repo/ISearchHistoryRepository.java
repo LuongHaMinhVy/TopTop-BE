@@ -11,7 +11,7 @@ import java.util.List;
 import java.util.Optional;
 
 @Repository
-public interface SearchHistoryRepository extends JpaRepository<SearchHistory, Long> {
+public interface ISearchHistoryRepository extends JpaRepository<SearchHistory, Long> {
     List<SearchHistory> findByUserOrderBySearchedAtDesc(User user, Pageable pageable);
 
     List<SearchHistory> findByUserAndNormalizedKeywordContainingIgnoreCaseOrderBySearchedAtDesc(

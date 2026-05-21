@@ -9,7 +9,7 @@ import java.util.List;
 import java.util.Optional;
 
 @Repository
-public interface SearchKeywordStatRepository extends JpaRepository<SearchKeywordStat, Long> {
+public interface ISearchKeywordStatRepository extends JpaRepository<SearchKeywordStat, Long> {
     Optional<SearchKeywordStat> findByNormalizedKeyword(String normalizedKeyword);
 
     List<SearchKeywordStat> findByNormalizedKeywordContainingIgnoreCaseOrderBySearchCountDescLastSearchedAtDesc(

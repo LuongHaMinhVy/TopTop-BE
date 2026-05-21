@@ -5,7 +5,7 @@ import com.back.auth.model.dto.request.RegisterRequest;
 import com.back.auth.model.dto.response.AuthResponse;
 import com.back.auth.model.dto.response.AuthResult;
 import com.back.auth.security.jwt.JwtService;
-import com.back.common.service.cookieservice.CookieService;
+import com.back.common.service.cookieservice.ICookieService;
 import com.back.common.service.emailservice.EmailService;
 import com.back.common.utils.Translator;
 import com.back.common.utils.exception.AppException;
@@ -44,10 +44,11 @@ public class AuthServiceImpl implements IAuthService {
     private final PasswordEncoder passwordEncoder;
     private final EmailService emailService;
     private final JwtService jwtService;
-    private final CookieService cookieService;
+    private final ICookieService ICookieService;
     private final BlacklistedTokenService blacklistedTokenService;
     private final VerificationTokenService verificationTokenService;
     private final Translator translator;
+    private final UserInfoMapper userInfoMapper;
 
     @Value("${jwt.access-token-expiration}")
     private Long accessTokenExpiration;
@@ -97,12 +98,12 @@ public class AuthServiceImpl implements IAuthService {
         String accessToken = jwtService.generateAccessToken(user);
         String refreshToken = jwtService.generateRefreshToken(user);
 
-        cookieService.add(response, "accessToken", accessToken,
+        ICookieService.add(response, "accessToken", accessToken,
                 (int)(accessTokenExpiration / 1000), request);
-        cookieService.add(response, "refreshToken", refreshToken,
+        ICookieService.add(response, "refreshToken", refreshToken,
                 (int)(refreshTokenExpiration / 1000), request);
 
-        UserInfo userInfo = UserInfoMapper.buildUserInfo(user);
+        UserInfo userInfo = userInfoMapper.buildUserInfo(user);
 
         AuthResponse authResponse = AuthResponse.builder()
                 .user(userInfo)
@@ -117,7 +118,7 @@ public class AuthServiceImpl implements IAuthService {
     @Override
     @Transactional
     public void logout(HttpServletRequest request, HttpServletResponse response) {
-        String accessToken = cookieService.get(request, "accessToken");
+        String accessToken = ICookieService.get(request, "accessToken");
         if (accessToken == null) {
             accessToken = jwtService.extractFromHeader(request);
         }
@@ -126,14 +127,14 @@ public class AuthServiceImpl implements IAuthService {
             blacklistedTokenService.add(accessToken, expiryTime);
             log.info("Access token blacklisted successfully");
         }
-        cookieService.clear(response, "accessToken", request);
-        cookieService.clear(response, "refreshToken", request);
+        ICookieService.clear(response, "accessToken", request);
+        ICookieService.clear(response, "refreshToken", request);
         
         HttpSession session = request.getSession(false);
         if (session != null) {
             session.invalidate();
         }
-        cookieService.clear(response, "JSESSIONID", request);
+        ICookieService.clear(response, "JSESSIONID", request);
 
         log.info("User logged out successfully");
     }
@@ -166,7 +167,6 @@ public class AuthServiceImpl implements IAuthService {
                 .followersCount(0L)
                 .followingCount(0L)
                 .totalLikes(0L)
-                .videoCount(0L)
                 .isPrivate(false)
                 .accountType(AccountType.PERSONAL)
                 .allowComments(true)
@@ -261,7 +261,7 @@ public class AuthServiceImpl implements IAuthService {
     @Override
     @Transactional
     public AuthResponse refreshToken(HttpServletRequest request, HttpServletResponse response) {
-        String refreshToken = cookieService.get(request, "refreshToken");
+        String refreshToken = ICookieService.get(request, "refreshToken");
         if (refreshToken == null || !jwtService.isTokenValid(refreshToken)) {
             throw new AppException(ErrorCode.INVALID_REFRESH_TOKEN);
         }
@@ -275,9 +275,9 @@ public class AuthServiceImpl implements IAuthService {
         }
 
         String newAccessToken = jwtService.generateAccessToken(user);
-        cookieService.add(response, "accessToken", newAccessToken, (int)(accessTokenExpiration / 1000), request);
+        ICookieService.add(response, "accessToken", newAccessToken, (int)(accessTokenExpiration / 1000), request);
         
-        UserInfo userInfo = UserInfoMapper.buildUserInfo(user);
+        UserInfo userInfo = userInfoMapper.buildUserInfo(user);
 
         return AuthResponse.builder()
                 .user(userInfo)
@@ -437,12 +437,12 @@ public class AuthServiceImpl implements IAuthService {
         String accessToken = jwtService.generateAccessToken(user);
         String refreshToken = jwtService.generateRefreshToken(user);
 
-        cookieService.add(servletResponse, "accessToken", accessToken,
+        ICookieService.add(servletResponse, "accessToken", accessToken,
                 (int)(accessTokenExpiration / 1000), servletRequest);
-        cookieService.add(servletResponse, "refreshToken", refreshToken,
+        ICookieService.add(servletResponse, "refreshToken", refreshToken,
                 (int)(refreshTokenExpiration / 1000), servletRequest);
 
-        UserInfo userInfo = UserInfoMapper.buildUserInfo(user);
+        UserInfo userInfo = userInfoMapper.buildUserInfo(user);
 
         return AuthResponse.builder()
                 .user(userInfo)

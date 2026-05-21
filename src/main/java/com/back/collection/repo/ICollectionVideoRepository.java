@@ -10,10 +10,12 @@ import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 import org.springframework.stereotype.Repository;
 
+import org.springframework.data.domain.Limit;
+
 import java.util.Optional;
 
 @Repository
-public interface CollectionVideoRepository extends JpaRepository<CollectionVideo, Long> {
+public interface ICollectionVideoRepository extends JpaRepository<CollectionVideo, Long> {
 
     boolean existsByCollectionIdAndVideoId(Long collectionId, Long videoId);
 
@@ -73,7 +75,7 @@ public interface CollectionVideoRepository extends JpaRepository<CollectionVideo
               AND cv.video.deletedAt IS NULL
             ORDER BY cv.addedAt DESC
             """)
-    Optional<CollectionVideo> findFirstAvailableByCollectionIdOrderByAddedAtDesc(@Param("collectionId") Long collectionId);
+    Optional<CollectionVideo> findFirstAvailableByCollectionIdOrderByAddedAtDesc(@Param("collectionId") Long collectionId, Limit limit);
 
     void deleteByCollectionId(Long collectionId);
 

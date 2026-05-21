@@ -31,6 +31,7 @@ public class UserServiceImpl implements IUserService {
     private final IUserRepo userRepo;
     private final IFollowService followService;
     private final R2StorageService storageService;
+    private final UserInfoMapper userInfoMapper;
 
     private User getCurrentUser() {
         Authentication authentication = SecurityContextHolder.getContext().getAuthentication();
@@ -65,7 +66,7 @@ public class UserServiceImpl implements IUserService {
         User user = userRepo.findByEmail(email)
                 .orElseThrow(() -> new AppException(ErrorCode.EMAIL_NOT_FOUND));
 
-        return UserInfoMapper.buildUserInfo(user);
+        return userInfoMapper.buildUserInfo(user);
     }
 
     @Override
@@ -80,7 +81,7 @@ public class UserServiceImpl implements IUserService {
             throw new AppException(ErrorCode.USER_BLOCKED);
         }
 
-        return UserInfoMapper.buildUserInfo(targetUser, relationship);
+        return userInfoMapper.buildUserInfo(targetUser, relationship);
     }
 
     @Override
@@ -128,7 +129,7 @@ public class UserServiceImpl implements IUserService {
         User updatedUser = userRepo.save(currentUser);
         log.info("Successfully updated profile for user: {}", updatedUser.getEmail());
 
-        return UserInfoMapper.buildUserInfo(updatedUser);
+        return userInfoMapper.buildUserInfo(updatedUser);
     }
 
     @Override

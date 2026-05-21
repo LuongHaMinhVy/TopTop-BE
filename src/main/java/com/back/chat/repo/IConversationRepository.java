@@ -7,6 +7,6 @@ import org.springframework.stereotype.Repository;
 import java.util.Optional;
 
 @Repository
-public interface ConversationRepository extends JpaRepository<Conversation, Long> {
+public interface IConversationRepository extends JpaRepository<Conversation, Long> {
     Optional<Conversation> findByDirectKey(String directKey);
 }

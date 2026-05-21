@@ -1,13 +1,12 @@
 package com.back.auth.security.jwt;
 
 import com.back.common.model.dto.response.ApiResponse;
-import com.back.common.service.cookieservice.CookieService;
+import com.back.common.service.cookieservice.ICookieService;
 import com.back.common.utils.exception.AppException;
 import com.back.common.utils.Translator;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import jakarta.servlet.FilterChain;
 import jakarta.servlet.ServletException;
-import jakarta.servlet.http.Cookie;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
 import lombok.RequiredArgsConstructor;
@@ -32,7 +31,7 @@ public class JwtAuthFilter extends OncePerRequestFilter {
     private static final Logger log = LoggerFactory.getLogger(JwtAuthFilter.class);
 
     private final JwtService jwtService;
-    private final CookieService cookieService;
+    private final ICookieService ICookieService;
     private final ObjectMapper objectMapper;
 
     @Override
@@ -42,7 +41,7 @@ public class JwtAuthFilter extends OncePerRequestFilter {
             @NonNull FilterChain filterChain
     ) throws ServletException, IOException {
 
-        String token = cookieService.get(request, "accessToken");
+        String token = ICookieService.get(request, "accessToken");
 
         if (token == null) {
             final String authHeader = request.getHeader("Authorization");

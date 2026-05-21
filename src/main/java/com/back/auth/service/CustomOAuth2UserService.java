@@ -131,7 +131,6 @@ public class CustomOAuth2UserService extends DefaultOAuth2UserService {
                 .followingCount(0L)
                 .gender(Gender.OTHER)
                 .totalLikes(0L)
-                .videoCount(0L)
                 .isPrivate(false)
                 .accountType(AccountType.PERSONAL)
                 .allowComments(true)

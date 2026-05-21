@@ -26,6 +26,7 @@ public class FriendServiceImpl implements IFriendService {
     private final IFollowRepo followRepo;
     private final IVideoService videoService;
     private final IFollowService followService;
+    private final UserInfoMapper userInfoMapper;
 
     private User getCurrentUser() {
         Authentication authentication = SecurityContextHolder.getContext().getAuthentication();
@@ -56,7 +57,7 @@ public class FriendServiceImpl implements IFriendService {
 
         return suggestedUsers.map(user -> {
             RelationshipStatus rel = followService.getRelationshipStatus(currentUser, user);
-            return UserInfoMapper.buildUserInfo(user, rel);
+            return userInfoMapper.buildUserInfo(user, rel);
         });
     }
 

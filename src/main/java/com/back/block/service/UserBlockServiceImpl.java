@@ -25,6 +25,7 @@ public class UserBlockServiceImpl implements IUserBlockService {
     private final IUserBlockRepo userBlockRepo;
     private final IFollowRepo followRepo;
     private final IUserRepo userRepo;
+    private final UserInfoMapper userInfoMapper;
 
     @Override
     @Transactional
@@ -64,7 +65,7 @@ public class UserBlockServiceImpl implements IUserBlockService {
     public Page<UserInfo> getBlockedUsers(Pageable pageable) {
         User currentUser = getCurrentUserOrThrow();
         return userBlockRepo.findByBlocker(currentUser, pageable)
-                .map(block -> UserInfoMapper.buildUserInfo(block.getBlocked()));
+                .map(block -> userInfoMapper.buildUserInfo(block.getBlocked()));
     }
 
     @Override

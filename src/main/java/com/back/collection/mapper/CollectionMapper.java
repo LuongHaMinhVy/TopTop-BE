@@ -3,20 +3,21 @@ package com.back.collection.mapper;
 import com.back.collection.model.dto.response.CollectionResponseDTO;
 import com.back.collection.model.entity.CollectionVideo;
 import com.back.collection.model.entity.VideoCollection;
-import com.back.collection.repo.CollectionVideoRepository;
+import com.back.collection.repo.ICollectionVideoRepository;
 import lombok.RequiredArgsConstructor;
+import org.springframework.data.domain.Limit;
 import org.springframework.stereotype.Component;
 
 @Component
 @RequiredArgsConstructor
 public class CollectionMapper {
 
-    private final CollectionVideoRepository collectionVideoRepository;
+    private final ICollectionVideoRepository ICollectionVideoRepository;
 
     public CollectionResponseDTO toResponseDTO(VideoCollection collection) {
-        Long videoCount = collectionVideoRepository.countByCollectionId(collection.getId());
-        String coverUrl = collectionVideoRepository
-                .findFirstAvailableByCollectionIdOrderByAddedAtDesc(collection.getId())
+        Long videoCount = ICollectionVideoRepository.countByCollectionId(collection.getId());
+        String coverUrl = ICollectionVideoRepository
+                .findFirstAvailableByCollectionIdOrderByAddedAtDesc(collection.getId(), Limit.of(1))
                 .map(CollectionVideo::getVideo)
                 .map(video -> video.getThumbnailUrl() != null ? video.getThumbnailUrl() : video.getFileUrl())
                 .orElse(null);

@@ -1,6 +1,7 @@
 package com.back.video.service;
 
 import com.back.video.model.dto.request.VideoResponseDTO;
+import com.back.video.model.dto.response.VideoDailyMetricResponseDTO;
 import com.back.video.model.dto.response.VideoStatsResponseDTO;
 import com.back.video.model.dto.response.VideoUploadRequestDTO;
 import org.springframework.data.domain.Page;
@@ -8,6 +9,7 @@ import org.springframework.data.domain.Pageable;
 import org.springframework.web.multipart.MultipartFile;
 
 import java.io.IOException;
+import java.util.List;
 
 public interface IVideoService {
     VideoResponseDTO uploadVideo(MultipartFile file, MultipartFile cover, VideoUploadRequestDTO requestDTO) throws IOException;
@@ -20,6 +22,8 @@ public interface IVideoService {
     VideoStatsResponseDTO unlikeVideo(Long id);
     VideoStatsResponseDTO repostVideo(Long id);
     VideoStatsResponseDTO unrepostVideo(Long id);
+    VideoStatsResponseDTO recordVideoView(Long id);
+    List<VideoDailyMetricResponseDTO> getStudioDailyViews(int days);
     VideoResponseDTO getVideoByUsernameAndId(String username, Long videoId);
     VideoResponseDTO updateVideo(Long id, VideoUploadRequestDTO requestDTO);
     Page<VideoResponseDTO> getLikedVideos(Pageable pageable);

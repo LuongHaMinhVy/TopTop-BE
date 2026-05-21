@@ -3,7 +3,7 @@ package com.back.config.cloudflare;
 import org.springframework.boot.context.properties.ConfigurationProperties;
 
 @ConfigurationProperties(prefix = "cloudflare.r2")
-public record CloudflareR2Properties(
+public record RCloudflareR2Properties(
     String accountId,
     String accessKey,
     String secretKey,

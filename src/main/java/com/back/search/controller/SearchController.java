@@ -4,8 +4,8 @@ import com.back.common.model.dto.response.ApiResponse;
 import com.back.common.model.dto.response.Meta;
 import com.back.search.model.dto.request.SaveSearchHistoryRequestDTO;
 import com.back.search.model.dto.response.*;
-import com.back.search.service.SearchHistoryService;
-import com.back.search.service.SearchService;
+import com.back.search.service.ISearchHistoryService;
+import com.back.search.service.ISearchService;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.Page;
@@ -23,8 +23,8 @@ import java.util.List;
 @RequestMapping("/api/v1/search")
 @RequiredArgsConstructor
 public class SearchController {
-    private final SearchService searchService;
-    private final SearchHistoryService searchHistoryService;
+    private final ISearchService ISearchService;
+    private final ISearchHistoryService ISearchHistoryService;
 
     @GetMapping("/top")
     public ResponseEntity<ApiResponse<SearchTopResponseDTO>> top(
@@ -33,7 +33,7 @@ public class SearchController {
     ) {
         return ResponseEntity.ok(ApiResponse.<SearchTopResponseDTO>builder()
                 .message("Tìm kiếm thành công")
-                .data(searchService.searchTop(keyword, authentication))
+                .data(ISearchService.searchTop(keyword, authentication))
                 .status(HttpStatus.OK.value())
                 .timestamp(LocalDateTime.now())
                 .build());
@@ -45,7 +45,7 @@ public class SearchController {
             @PageableDefault(size = 20) Pageable pageable,
             Authentication authentication
     ) {
-        Page<SearchUserResponseDTO> page = searchService.searchUsers(keyword, pageable, authentication);
+        Page<SearchUserResponseDTO> page = ISearchService.searchUsers(keyword, pageable, authentication);
         return paged("Tìm kiếm người dùng thành công", page);
     }
 
@@ -55,7 +55,7 @@ public class SearchController {
             @PageableDefault(size = 20) Pageable pageable,
             Authentication authentication
     ) {
-        Page<SearchVideoResponseDTO> page = searchService.searchVideos(keyword, pageable, authentication);
+        Page<SearchVideoResponseDTO> page = ISearchService.searchVideos(keyword, pageable, authentication);
         return paged("Tìm kiếm video thành công", page);
     }
 
@@ -65,7 +65,7 @@ public class SearchController {
             @PageableDefault(size = 20) Pageable pageable,
             Authentication authentication
     ) {
-        Page<SearchLiveResponseDTO> page = searchService.searchLive(keyword, pageable, authentication);
+        Page<SearchLiveResponseDTO> page = ISearchService.searchLive(keyword, pageable, authentication);
         return paged("Tìm kiếm LIVE thành công", page);
     }
 
@@ -76,7 +76,7 @@ public class SearchController {
     ) {
         return ResponseEntity.ok(ApiResponse.<SearchSuggestionResponseDTO>builder()
                 .message("Gợi ý tìm kiếm thành công")
-                .data(searchService.suggestions(keyword, authentication))
+                .data(ISearchService.suggestions(keyword, authentication))
                 .status(HttpStatus.OK.value())
                 .timestamp(LocalDateTime.now())
                 .build());
@@ -86,7 +86,7 @@ public class SearchController {
     public ResponseEntity<ApiResponse<List<SearchHistoryResponseDTO>>> history(Authentication authentication) {
         return ResponseEntity.ok(ApiResponse.<List<SearchHistoryResponseDTO>>builder()
                 .message("Lịch sử tìm kiếm")
-                .data(searchHistoryService.getMyHistory(authentication))
+                .data(ISearchHistoryService.getMyHistory(authentication))
                 .status(HttpStatus.OK.value())
                 .timestamp(LocalDateTime.now())
                 .build());
@@ -99,7 +99,7 @@ public class SearchController {
     ) {
         return ResponseEntity.ok(ApiResponse.<SearchHistoryResponseDTO>builder()
                 .message("Đã lưu lịch sử tìm kiếm")
-                .data(searchHistoryService.save(authentication, request))
+                .data(ISearchHistoryService.save(authentication, request))
                 .status(HttpStatus.OK.value())
                 .timestamp(LocalDateTime.now())
                 .build());
@@ -110,13 +110,13 @@ public class SearchController {
             Authentication authentication,
             @PathVariable Long historyId
     ) {
-        searchHistoryService.deleteOne(authentication, historyId);
+        ISearchHistoryService.deleteOne(authentication, historyId);
         return ResponseEntity.ok(empty("Đã xóa lịch sử tìm kiếm"));
     }
 
     @DeleteMapping("/history")
     public ResponseEntity<ApiResponse<Void>> clearHistory(Authentication authentication) {
-        searchHistoryService.clear(authentication);
+        ISearchHistoryService.clear(authentication);
         return ResponseEntity.ok(empty("Đã xóa lịch sử tìm kiếm"));
     }
 

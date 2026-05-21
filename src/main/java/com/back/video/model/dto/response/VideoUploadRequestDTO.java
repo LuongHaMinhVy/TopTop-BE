@@ -22,4 +22,6 @@ public class VideoUploadRequestDTO {
     private Boolean allowComments;
 
     private Boolean allowEdit;
+
+    private Long soundId;
 }

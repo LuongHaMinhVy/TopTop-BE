@@ -5,7 +5,7 @@ import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.security.core.Authentication;
 
-public interface SearchService {
+public interface ISearchService{
     SearchTopResponseDTO searchTop(String keyword, Authentication authentication);
 
     Page<SearchUserResponseDTO> searchUsers(String keyword, Pageable pageable, Authentication authentication);

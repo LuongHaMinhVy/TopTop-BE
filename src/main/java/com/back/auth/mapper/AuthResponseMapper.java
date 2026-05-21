@@ -4,6 +4,7 @@ import com.back.auth.model.dto.response.AuthResponse;
 import com.back.user.model.dto.response.PrivacySettings;
 import com.back.user.model.dto.response.UserInfo;
 import com.back.user.model.entity.User;
+import com.back.video.repo.IVideoRepository;
 import lombok.RequiredArgsConstructor;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Component;
@@ -14,6 +15,8 @@ public class AuthResponseMapper {
 
     @Value("${jwt.access-token-expiration}")
     private Long accessTokenExpiration;
+
+    private final IVideoRepository videoRepository;
 
     public AuthResponse toAuthResponse(User user, String accessToken) {
         UserInfo userInfo = UserInfo.builder()
@@ -27,7 +30,7 @@ public class AuthResponseMapper {
                 .followersCount(user.getFollowersCount())
                 .followingCount(user.getFollowingCount())
                 .totalLikes(user.getTotalLikes())
-                .videoCount(user.getVideoCount())
+                .videoCount(videoRepository.countByUserIdAndDeletedAtIsNull(user.getId()))
                 .verified(user.getVerified())
                 .isPrivate(user.getIsPrivate())
                 .status(user.getStatus() != null ? user.getStatus().name() : null)

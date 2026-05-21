@@ -11,6 +11,10 @@ import lombok.experimental.UtilityClass;
 public class ConversationMapper {
 
     public static ConversationResponseDTO toResponse(Conversation conversation, ConversationParticipant currentParticipant, ConversationParticipant targetParticipant) {
+        return toResponse(conversation, currentParticipant, targetParticipant, currentParticipant != null ? calculateUnreadCount(conversation, currentParticipant) : 0L);
+    }
+
+    public static ConversationResponseDTO toResponse(Conversation conversation, ConversationParticipant currentParticipant, ConversationParticipant targetParticipant, Long unreadCount) {
         if (conversation == null) return null;
 
         return ConversationResponseDTO.builder()
@@ -20,7 +24,7 @@ public class ConversationMapper {
                 .targetUser(toParticipantResponse(targetParticipant))
                 .lastMessagePreview(conversation.getLastMessagePreview())
                 .lastMessageAt(conversation.getLastMessageAt())
-                .unreadCount(currentParticipant != null ? calculateUnreadCount(conversation, currentParticipant) : 0L)
+                .unreadCount(unreadCount != null ? unreadCount : 0L)
                 .muted(currentParticipant != null && currentParticipant.getMutedUntil() != null)
                 .pinned(currentParticipant != null && currentParticipant.getIsPinned())
                 .createdAt(conversation.getCreatedAt())

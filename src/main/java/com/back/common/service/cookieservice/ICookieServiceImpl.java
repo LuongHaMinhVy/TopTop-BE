@@ -6,7 +6,7 @@ import jakarta.servlet.http.HttpServletResponse;
 import org.springframework.stereotype.Service;
 
 @Service
-public class CookieServiceImpl implements CookieService {
+public class ICookieServiceImpl implements ICookieService{
 
     @Override
     public String get(HttpServletRequest request, String name) {

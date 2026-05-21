@@ -8,6 +8,7 @@ import lombok.NoArgsConstructor;
 import java.time.LocalDateTime;
 import java.util.List;
 import com.back.video.model.dto.response.VideoRepostUserResponseDTO;
+import com.back.sound.model.dto.response.SoundResponseDTO;
 
 @Data
 @Builder
@@ -40,4 +41,5 @@ public class VideoResponseDTO {
     private String visibility;
     private Boolean deleted;
     private Boolean unavailable;
+    private SoundResponseDTO sound;
 }

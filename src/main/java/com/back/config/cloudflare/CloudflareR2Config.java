@@ -15,18 +15,18 @@ import software.amazon.awssdk.services.s3.S3AsyncClient;
 import java.net.URI;
 
 @Configuration
-@EnableConfigurationProperties(CloudflareR2Properties.class)
+@EnableConfigurationProperties(RCloudflareR2Properties.class)
 public class CloudflareR2Config {
 
     @Bean
-    public StaticCredentialsProvider credentialsProvider(CloudflareR2Properties props) {
+    public StaticCredentialsProvider credentialsProvider(RCloudflareR2Properties props) {
         return StaticCredentialsProvider.create(
                 AwsBasicCredentials.create(props.accessKey(), props.secretKey())
         );
     }
 
     @Bean
-    public S3Client s3Client(CloudflareR2Properties props,
+    public S3Client s3Client(RCloudflareR2Properties props,
                              StaticCredentialsProvider creds) {
         return S3Client.builder()
                 .endpointOverride(URI.create(props.endpoint()))
@@ -39,7 +39,7 @@ public class CloudflareR2Config {
     }
 
     @Bean
-    public S3AsyncClient s3AsyncClient(CloudflareR2Properties props,
+    public S3AsyncClient s3AsyncClient(RCloudflareR2Properties props,
                                        StaticCredentialsProvider creds) {
         return S3AsyncClient.builder()
                 .endpointOverride(URI.create(props.endpoint()))
@@ -59,7 +59,7 @@ public class CloudflareR2Config {
     }
 
     @Bean
-    public S3Presigner s3Presigner(CloudflareR2Properties props,
+    public S3Presigner s3Presigner(RCloudflareR2Properties props,
                                    StaticCredentialsProvider creds) {
         return S3Presigner.builder()
                 .endpointOverride(URI.create(props.endpoint()))

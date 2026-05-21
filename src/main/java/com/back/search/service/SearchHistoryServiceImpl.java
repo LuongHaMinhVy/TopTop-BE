@@ -9,8 +9,8 @@ import com.back.search.model.entity.SearchHistory;
 import com.back.search.model.entity.SearchKeywordStat;
 import com.back.search.model.enums.SearchSourceType;
 import com.back.search.model.enums.SearchType;
-import com.back.search.repo.SearchHistoryRepository;
-import com.back.search.repo.SearchKeywordStatRepository;
+import com.back.search.repo.ISearchHistoryRepository;
+import com.back.search.repo.ISearchKeywordStatRepository;
 import com.back.user.model.entity.User;
 import com.back.user.repo.IUserRepo;
 import lombok.RequiredArgsConstructor;
@@ -25,9 +25,9 @@ import java.util.List;
 
 @Service
 @RequiredArgsConstructor
-public class SearchHistoryServiceImpl implements SearchHistoryService {
-    private final SearchHistoryRepository historyRepository;
-    private final SearchKeywordStatRepository keywordStatRepository;
+public class SearchHistoryServiceImpl implements ISearchHistoryService{
+    private final ISearchHistoryRepository historyRepository;
+    private final ISearchKeywordStatRepository keywordStatRepository;
     private final IUserRepo userRepo;
 
     @Override

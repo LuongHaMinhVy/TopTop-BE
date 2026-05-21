@@ -2,6 +2,7 @@ package com.back.video.model.entity;
 
 import com.back.common.model.entity.BaseEntity;
 import com.back.hashtag.model.entity.Hashtag;
+import com.back.sound.model.entity.Sound;
 import com.back.user.model.entity.User;
 import com.back.video.model.enums.VideoVisibility;
 import jakarta.persistence.*;
@@ -69,6 +70,10 @@ public class Video extends BaseEntity {
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "user_id", nullable = false)
     private User user;
+
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "sound_id")
+    private Sound sound;
 
     @ManyToMany(fetch = FetchType.LAZY, cascade = {CascadeType.PERSIST, CascadeType.MERGE})
     @JoinTable(

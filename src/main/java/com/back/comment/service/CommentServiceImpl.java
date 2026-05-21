@@ -129,7 +129,8 @@ public class CommentServiceImpl implements ICommentService {
         }
 
         Video video = comment.getVideo();
-        video.setCommentCount(Math.max(0L, safe(video.getCommentCount()) - 1));
+        long countToRemove = 1L + (comment.getParent() == null ? safe(comment.getReplyCount()) : 0L);
+        video.setCommentCount(Math.max(0L, safe(video.getCommentCount()) - countToRemove));
         videoRepository.save(video);
 
         if (comment.getParent() != null) {

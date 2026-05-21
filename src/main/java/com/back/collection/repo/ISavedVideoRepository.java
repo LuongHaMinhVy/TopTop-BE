@@ -12,7 +12,7 @@ import org.springframework.stereotype.Repository;
 import java.util.Optional;
 
 @Repository
-public interface SavedVideoRepository extends JpaRepository<SavedVideo, Long> {
+public interface ISavedVideoRepository extends JpaRepository<SavedVideo, Long> {
 
     boolean existsByUserIdAndVideoId(Long userId, Long videoId);
 

@@ -111,6 +111,9 @@ public class SecurityConfig {
                         .requestMatchers("/api/v1/search/history", "/api/v1/search/history/**")
                         .hasAnyAuthority(RoleName.ROLE_USER.name(), RoleName.ROLE_ADMIN.name())
 
+                        // ── Sound endpoints ──────────────────────────────────────
+                        .requestMatchers(HttpMethod.GET, "/api/v1/sounds/**").permitAll()
+
                         // ── Track endpoints ──────────────────────────────────────
                         .requestMatchers(HttpMethod.GET, "/api/v1/tracks/**").permitAll()
                         .requestMatchers(HttpMethod.POST, "/api/v1/tracks/**")

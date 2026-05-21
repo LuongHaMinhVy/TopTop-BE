@@ -9,10 +9,10 @@ import com.back.chat.model.entity.Message;
 import com.back.chat.model.entity.MessageAttachment;
 import com.back.chat.model.enums.MessageStatus;
 import com.back.chat.model.enums.MessageType;
-import com.back.chat.repo.ConversationRepository;
-import com.back.chat.repo.MessageAttachmentRepository;
-import com.back.chat.repo.MessageRepository;
-import com.back.chat.repo.ConversationParticipantRepository;
+import com.back.chat.repo.IConversationRepository;
+import com.back.chat.repo.IMessageAttachmentRepository;
+import com.back.chat.repo.IMessageRepository;
+import com.back.chat.repo.IConversationParticipantRepository;
 import com.back.common.utils.exception.AppException;
 import com.back.common.utils.exception.ErrorCode;
 import com.back.user.model.entity.User;
@@ -33,10 +33,10 @@ import java.time.LocalDateTime;
 @RequiredArgsConstructor
 public class ChatMessageServiceImpl implements IChatMessageService {
 
-    private final MessageRepository messageRepository;
-    private final ConversationRepository conversationRepository;
-    private final ConversationParticipantRepository participantRepository;
-    private final MessageAttachmentRepository attachmentRepository;
+    private final IMessageRepository IMessageRepository;
+    private final IConversationRepository IConversationRepository;
+    private final IConversationParticipantRepository participantRepository;
+    private final IMessageAttachmentRepository attachmentRepository;
     private final IUserRepo userRepo;
     private final IVideoRepository videoRepository;
     private final IChatRealtimeService realtimeService;
@@ -45,9 +45,9 @@ public class ChatMessageServiceImpl implements IChatMessageService {
     @Transactional
     public MessageResponseDTO sendMessage(Authentication authentication, SendMessageRequestDTO request) {
         User currentUser = getCurrentUser(authentication);
-        Conversation conversation = conversationRepository.findById(request.getConversationId())
+        Conversation conversation = IConversationRepository.findById(request.getConversationId())
                 .orElseThrow(() -> new AppException(ErrorCode.FILE_NOT_FOUND));
-        participantRepository.findByConversationAndUser(conversation, currentUser)
+        var currentParticipant = participantRepository.findByConversationAndUser(conversation, currentUser)
                 .orElseThrow(() -> new AppException(ErrorCode.CHAT_ACCESS_DENIED));
 
         if (request.getType() == MessageType.VIDEO_SHARE && request.getVideoId() == null) {
@@ -58,7 +58,7 @@ public class ChatMessageServiceImpl implements IChatMessageService {
             throw new AppException(ErrorCode.BAD_REQUEST);
         }
 
-        messageRepository.findBySenderIdAndClientMessageId(currentUser.getId(), request.getClientMessageId())
+        IMessageRepository.findBySenderIdAndClientMessageId(currentUser.getId(), request.getClientMessageId())
                 .ifPresent(m -> { throw new AppException(ErrorCode.BAD_REQUEST); });
 
         Message message = Message.builder()
@@ -70,7 +70,7 @@ public class ChatMessageServiceImpl implements IChatMessageService {
                 .clientMessageId(request.getClientMessageId())
                 .replyToMessageId(request.getReplyToMessageId())
                 .build();
-        message = messageRepository.save(message);
+        message = IMessageRepository.save(message);
 
         MessageAttachment attachment = null;
         if (request.getType() == MessageType.VIDEO_SHARE) {
@@ -122,7 +122,11 @@ public class ChatMessageServiceImpl implements IChatMessageService {
             default -> "Sent an attachment";
         };
         conversation.setLastMessagePreview(preview);
-        conversationRepository.save(conversation);
+        IConversationRepository.save(conversation);
+
+        currentParticipant.setLastReadAt(message.getCreatedAt() != null ? message.getCreatedAt() : LocalDateTime.now());
+        currentParticipant.setLastReadMessageId(message.getId());
+        participantRepository.save(currentParticipant);
 
         MessageResponseDTO responseDTO = MessageMapper.toResponse(message, attachment, currentUser.getId());
 
@@ -139,12 +143,12 @@ public class ChatMessageServiceImpl implements IChatMessageService {
     @Override
     public Page<MessageResponseDTO> getMessages(Authentication authentication, Long conversationId, Pageable pageable) {
         User currentUser = getCurrentUser(authentication);
-        Conversation conversation = conversationRepository.findById(conversationId)
+        Conversation conversation = IConversationRepository.findById(conversationId)
                 .orElseThrow(() -> new AppException(ErrorCode.FILE_NOT_FOUND));
         participantRepository.findByConversationAndUser(conversation, currentUser)
                 .orElseThrow(() -> new AppException(ErrorCode.CHAT_ACCESS_DENIED));
 
-        Page<Message> messages = messageRepository.findByConversationOrderByCreatedAtDesc(conversation, pageable);
+        Page<Message> messages = IMessageRepository.findByConversationOrderByCreatedAtDesc(conversation, pageable);
 
         return messages.map(m -> {
             MessageAttachment attachment = attachmentRepository.findByMessage(m).orElse(null);

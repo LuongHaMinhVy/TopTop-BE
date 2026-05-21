@@ -182,6 +182,8 @@ public interface IVideoRepository extends JpaRepository<Video, Long> {
             """)
     Page<Video> findLikedVideosByUserId(@Param("userId") Long userId, Pageable pageable);
 
+    long countByUserIdAndDeletedAtIsNull(Long userId);
+
     @Query("SELECT v FROM Video v WHERE v.deletedAt IS NOT NULL AND v.deletedAt < :cutoff")
     List<Video> findExpiredVideos(LocalDateTime cutoff);
 
@@ -203,4 +205,14 @@ public interface IVideoRepository extends JpaRepository<Video, Long> {
             ORDER BY v.likeCount DESC, v.viewCount DESC, v.createdAt DESC
             """)
     Page<Video> searchPublicVideos(@Param("keyword") String keyword, Pageable pageable);
+
+    @EntityGraph(attributePaths = {"user", "sound"})
+    @Query("""
+            SELECT v FROM Video v
+            WHERE v.deletedAt IS NULL
+              AND v.sound.id = :soundId
+              AND v.visibility = com.back.video.model.enums.VideoVisibility.PUBLIC
+            ORDER BY v.createdAt DESC
+            """)
+    Page<Video> findPublicVideosBySoundId(@Param("soundId") Long soundId, Pageable pageable);
 }

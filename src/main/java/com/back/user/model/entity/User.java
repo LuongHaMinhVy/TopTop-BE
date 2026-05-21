@@ -61,10 +61,6 @@ public class User extends BaseEntity {
 
     @Builder.Default
     @Column(nullable = false)
-    private Long videoCount = 0L;
-
-    @Builder.Default
-    @Column(nullable = false)
     private Boolean verified = false;
 
     @Builder.Default

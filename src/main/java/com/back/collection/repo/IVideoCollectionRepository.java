@@ -9,7 +9,7 @@ import java.util.List;
 import java.util.Optional;
 
 @Repository
-public interface VideoCollectionRepository extends JpaRepository<VideoCollection, Long> {
+public interface IVideoCollectionRepository extends JpaRepository<VideoCollection, Long> {
 
     @EntityGraph(attributePaths = {"user"})
     List<VideoCollection> findByUserIdOrderByCreatedAtDesc(Long userId);

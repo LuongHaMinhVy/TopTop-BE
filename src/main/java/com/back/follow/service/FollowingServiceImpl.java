@@ -27,6 +27,7 @@ public class FollowingServiceImpl implements IFollowingService {
     private final IUserRepo userRepo;
     private final IVideoService videoService;
     private final IFollowService followService;
+    private final UserInfoMapper userInfoMapper;
 
     private User getCurrentUserOrNull() {
         Authentication authentication = SecurityContextHolder.getContext().getAuthentication();
@@ -66,7 +67,7 @@ public class FollowingServiceImpl implements IFollowingService {
                         .isBlockedBy(false)
                         .isFriend(false)
                         .build();
-            return UserInfoMapper.buildUserInfo(user, rel);
+            return userInfoMapper.buildUserInfo(user, rel);
         });
     }
 

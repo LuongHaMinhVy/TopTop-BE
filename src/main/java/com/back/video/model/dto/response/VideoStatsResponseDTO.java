@@ -13,6 +13,7 @@ import java.util.List;
 public class VideoStatsResponseDTO {
     private Long videoId;
     private Boolean liked;
+    private Long viewCount;
     private Long likeCount;
     private Long commentCount;
     private Long saveCount;

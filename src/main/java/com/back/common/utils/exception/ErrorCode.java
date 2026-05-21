@@ -68,6 +68,7 @@ public enum ErrorCode {
     REPORT_ALREADY_SUBMITTED(HttpStatus.CONFLICT, "You have already reported this content for this reason"),
     REPORT_RATE_LIMIT_EXCEEDED(HttpStatus.TOO_MANY_REQUESTS, "You have submitted too many reports recently. Please try again later"),
     VIDEO_NOT_FOUND(HttpStatus.NOT_FOUND, "Video not found"),
+    SOUND_NOT_FOUND(HttpStatus.NOT_FOUND, "Sound not found"),
     COMMENT_NOT_FOUND(HttpStatus.NOT_FOUND, "Comment not found"),
     COLLECTION_NOT_FOUND(HttpStatus.NOT_FOUND, "Collection not found"),
     COLLECTION_ALREADY_EXISTS(HttpStatus.CONFLICT, "Collection already exists"),
