@@ -4,6 +4,11 @@ import com.back.follow.repo.IFollowRepo;
 import com.back.search.model.dto.response.SearchHistoryResponseDTO;
 import com.back.search.model.dto.response.SearchUserResponseDTO;
 import com.back.search.model.dto.response.SearchVideoResponseDTO;
+import com.back.sound.model.dto.response.SoundAuthorResponseDTO;
+import com.back.sound.model.dto.response.SoundResponseDTO;
+import com.back.sound.model.dto.response.SoundStatsResponseDTO;
+import com.back.sound.model.entity.Sound;
+import com.back.sound.model.enums.SoundType;
 import com.back.search.model.entity.SearchHistory;
 import com.back.user.model.entity.User;
 import com.back.video.model.entity.Video;
@@ -54,6 +59,47 @@ public final class SearchMapper {
                 .commentCount(video.getCommentCount())
                 .createdAt(video.getCreatedAt())
                 .author(toUserResponse(video.getUser(), viewer, followRepo))
+                .sound(toSoundResponse(video.getSound()))
+                .build();
+    }
+
+    private static SoundResponseDTO toSoundResponse(Sound sound) {
+        if (sound == null) return null;
+        long usageCount = sound.getUsageCount() == null ? 0L : sound.getUsageCount();
+        long savedCount = sound.getSavedCount() == null ? 0L : sound.getSavedCount();
+
+        return SoundResponseDTO.builder()
+                .id(sound.getId())
+                .title(sound.getTitle())
+                .artistName(sound.getArtistName())
+                .audioUrl(sound.getAudioUrl())
+                .coverUrl(sound.getCoverUrl())
+                .durationSeconds(sound.getDurationSeconds())
+                .type(sound.getType().name())
+                .originalSound(sound.getType() == SoundType.ORIGINAL)
+                .owner(toSoundAuthorResponse(sound.getOwner()))
+                .stats(SoundStatsResponseDTO.builder()
+                        .soundId(sound.getId())
+                        .usageCount(usageCount)
+                        .videoCount(usageCount)
+                        .savedCount(savedCount)
+                        .isSaved(false)
+                        .build())
+                .isSaved(false)
+                .isPublic(sound.getIsPublic())
+                .isActive(sound.getIsActive())
+                .createdAt(sound.getCreatedAt())
+                .build();
+    }
+
+    private static SoundAuthorResponseDTO toSoundAuthorResponse(User user) {
+        if (user == null) return null;
+        return SoundAuthorResponseDTO.builder()
+                .id(user.getId())
+                .username(user.getUsername())
+                .displayName(user.getNickname())
+                .avatarUrl(user.getAvatarUrl())
+                .isVerified(user.getVerified())
                 .build();
     }
 }

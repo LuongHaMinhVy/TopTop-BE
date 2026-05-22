@@ -1,6 +1,5 @@
 package com.back.video.model.dto.response;
 
-import jakarta.validation.constraints.NotBlank;
 import lombok.AllArgsConstructor;
 import lombok.Builder;
 import lombok.Data;
@@ -24,4 +23,6 @@ public class VideoUploadRequestDTO {
     private Boolean allowEdit;
 
     private Long soundId;
+
+    private Boolean useAvatarAsSoundCover;
 }

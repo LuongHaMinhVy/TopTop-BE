@@ -64,6 +64,10 @@ public class Sound extends BaseEntity {
     private Long usageCount = 0L;
 
     @Builder.Default
+    @Column(name = "saved_count", nullable = false)
+    private Long savedCount = 0L;
+
+    @Builder.Default
     @Column(name = "is_public", nullable = false)
     private Boolean isPublic = true;
 

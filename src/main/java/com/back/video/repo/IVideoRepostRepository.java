@@ -27,6 +27,10 @@ public interface IVideoRepostRepository extends JpaRepository<VideoRepost, Long>
     @Query("SELECT vr FROM VideoRepost vr WHERE vr.video.id = :videoId ORDER BY vr.createdAt DESC")
     List<VideoRepost> findRecentByVideoId(@Param("videoId") Long videoId, Pageable pageable);
 
+    @EntityGraph(attributePaths = {"user"})
+    @Query("SELECT vr FROM VideoRepost vr WHERE vr.video.id = :videoId ORDER BY vr.createdAt DESC")
+    List<VideoRepost> findByVideoIdWithUser(@Param("videoId") Long videoId);
+
     @Query("""
             SELECT vr.video FROM VideoRepost vr
             WHERE LOWER(vr.user.username) = LOWER(:username)

@@ -19,9 +19,28 @@ public interface IUserRepo extends JpaRepository<User, Long>{
     boolean existsByEmail(String email);
 
     Optional<User> findByUsername(String usernameOrEmail);
-    
-    java.util.List<User> findTop10ByUsernameContainingIgnoreCaseOrNicknameContainingIgnoreCase(String username, String nickname);
-    java.util.List<User> findTop10ByOrderByCreatedAtDesc();
+
+    @Query("""
+            SELECT u FROM User u
+            WHERE u.username = :username
+              AND LOWER(u.username) <> 'admin'
+              AND NOT EXISTS (
+                  SELECT r.id FROM u.roles r
+                  WHERE r.name = com.back.user.model.enums.RoleName.ROLE_ADMIN
+              )
+            """)
+    Optional<User> findPublicUserByUsername(@Param("username") String username);
+
+    @Query("""
+            SELECT u FROM User u
+            WHERE LOWER(u.username) <> 'admin'
+              AND NOT EXISTS (
+                  SELECT r.id FROM u.roles r
+                  WHERE r.name = com.back.user.model.enums.RoleName.ROLE_ADMIN
+              )
+            ORDER BY u.createdAt DESC
+            """)
+    java.util.List<User> findRecentPublicUsers(Pageable pageable);
 
     @Query("""
             SELECT u FROM User u
@@ -29,6 +48,27 @@ public interface IUserRepo extends JpaRepository<User, Long>{
                   LOWER(u.username) LIKE LOWER(CONCAT('%', :keyword, '%'))
                OR LOWER(u.nickname) LIKE LOWER(CONCAT('%', :keyword, '%'))
             )
+              AND LOWER(u.username) <> 'admin'
+              AND NOT EXISTS (
+                  SELECT r.id FROM u.roles r
+                  WHERE r.name = com.back.user.model.enums.RoleName.ROLE_ADMIN
+              )
+            ORDER BY
+               CASE WHEN LOWER(u.username) = LOWER(:keyword) THEN 0 ELSE 1 END,
+               CASE WHEN LOWER(u.username) LIKE LOWER(CONCAT(:keyword, '%')) THEN 0 ELSE 1 END,
+               u.verified DESC,
+               u.followersCount DESC,
+               u.totalLikes DESC
+            """)
+    java.util.List<User> findPublicMentionSuggestions(@Param("keyword") String keyword, Pageable pageable);
+
+    @Query("""
+            SELECT u FROM User u
+            WHERE (
+                  LOWER(u.username) LIKE LOWER(CONCAT('%', :keyword, '%'))
+              OR LOWER(u.nickname) LIKE LOWER(CONCAT('%', :keyword, '%'))
+            )
+              AND LOWER(u.username) <> 'admin'
               AND NOT EXISTS (
                   SELECT r.id FROM u.roles r
                   WHERE r.name = com.back.user.model.enums.RoleName.ROLE_ADMIN
@@ -45,6 +85,7 @@ public interface IUserRepo extends JpaRepository<User, Long>{
     @Query("""
             SELECT u FROM User u
             WHERE (:viewerId IS NULL OR u.id <> :viewerId)
+              AND LOWER(u.username) <> 'admin'
               AND NOT EXISTS (
                   SELECT r.id FROM u.roles r
                   WHERE r.name = com.back.user.model.enums.RoleName.ROLE_ADMIN
@@ -65,6 +106,7 @@ public interface IUserRepo extends JpaRepository<User, Long>{
     @Query("""
             SELECT u FROM User u
             WHERE u.id <> :viewerId
+              AND LOWER(u.username) <> 'admin'
               AND NOT EXISTS (
                   SELECT r.id FROM u.roles r
                   WHERE r.name = com.back.user.model.enums.RoleName.ROLE_ADMIN

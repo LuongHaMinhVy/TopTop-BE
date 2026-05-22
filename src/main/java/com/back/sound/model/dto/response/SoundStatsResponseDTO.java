@@ -10,6 +10,9 @@ import lombok.NoArgsConstructor;
 @NoArgsConstructor
 @AllArgsConstructor
 public class SoundStatsResponseDTO {
+    private Long soundId;
     private Long usageCount;
     private Long videoCount;
+    private Long savedCount;
+    private Boolean isSaved;
 }

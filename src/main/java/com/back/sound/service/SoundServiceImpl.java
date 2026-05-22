@@ -7,8 +7,11 @@ import com.back.sound.model.dto.request.CreateSoundRequestDTO;
 import com.back.sound.model.dto.request.UpdateSoundRequestDTO;
 import com.back.sound.model.dto.response.SoundDetailResponseDTO;
 import com.back.sound.model.dto.response.SoundResponseDTO;
+import com.back.sound.model.dto.response.SoundStatsResponseDTO;
+import com.back.sound.model.entity.SavedSound;
 import com.back.sound.model.entity.Sound;
 import com.back.sound.model.enums.SoundType;
+import com.back.sound.repo.ISavedSoundRepository;
 import com.back.sound.repo.ISoundRepository;
 import com.back.user.model.entity.User;
 import com.back.user.repo.IUserRepo;
@@ -29,6 +32,7 @@ import org.springframework.transaction.annotation.Transactional;
 public class SoundServiceImpl implements ISoundService {
 
     private final ISoundRepository soundRepository;
+    private final ISavedSoundRepository savedSoundRepository;
     private final IVideoRepository videoRepository;
     private final IVideoService videoService;
     private final IUserRepo userRepo;
@@ -36,8 +40,15 @@ public class SoundServiceImpl implements ISoundService {
 
     @Override
     public Page<SoundResponseDTO> searchPublicSounds(String keyword, SoundType type, Pageable pageable) {
-        return soundRepository.searchPublicSounds(normalizeKeyword(keyword), type, pageable)
-                .map(soundMapper::toResponseDTO);
+        User currentUser = getCurrentUserOrNull();
+        Page<Sound> soundPage = soundRepository.searchPublicSounds(normalizeKeyword(keyword), type, pageable);
+        if (currentUser == null || soundPage.isEmpty()) {
+            return soundPage.map(soundMapper::toResponseDTO);
+        }
+
+        var soundIds = soundPage.getContent().stream().map(Sound::getId).toList();
+        var savedIds = savedSoundRepository.findSavedSoundIdsByUser(currentUser.getId(), soundIds);
+        return soundPage.map(sound -> soundMapper.toResponseDTO(sound, savedIds.contains(sound.getId())));
     }
 
     @Override
@@ -53,8 +64,10 @@ public class SoundServiceImpl implements ISoundService {
         boolean canEdit = currentUser != null
                 && sound.getOwner() != null
                 && sound.getOwner().getId().equals(currentUser.getId());
+        boolean isSaved = currentUser != null
+                && savedSoundRepository.existsByUserIdAndSoundId(currentUser.getId(), sound.getId());
 
-        return soundMapper.toDetailDTO(sound, true, canEdit);
+        return soundMapper.toDetailDTO(sound, true, canEdit, isSaved);
     }
 
     @Override
@@ -62,6 +75,47 @@ public class SoundServiceImpl implements ISoundService {
         getPublicSound(soundId);
         return videoRepository.findPublicVideosBySoundId(soundId, pageable)
                 .map(video -> videoService.getVideoById(video.getId()));
+    }
+
+    @Override
+    public Page<SoundResponseDTO> getFavoriteSounds(Pageable pageable) {
+        User currentUser = getCurrentUserOrThrow();
+        return savedSoundRepository.findByUserIdOrderByCreatedAtDesc(currentUser.getId(), pageable)
+                .map(savedSound -> soundMapper.toResponseDTO(savedSound.getSound(), true));
+    }
+
+    @Override
+    @Transactional
+    public SoundStatsResponseDTO saveSound(Long soundId) {
+        User currentUser = getCurrentUserOrThrow();
+        Sound sound = getPublicSound(soundId);
+
+        if (!savedSoundRepository.existsByUserIdAndSoundId(currentUser.getId(), soundId)) {
+            SavedSound savedSound = SavedSound.builder()
+                    .user(currentUser)
+                    .sound(sound)
+                    .build();
+            savedSoundRepository.save(savedSound);
+            soundRepository.incrementSavedCount(soundId);
+            sound.setSavedCount((sound.getSavedCount() == null ? 0L : sound.getSavedCount()) + 1);
+        }
+
+        return soundMapper.toStatsDTO(sound, true);
+    }
+
+    @Override
+    @Transactional
+    public SoundStatsResponseDTO unsaveSound(Long soundId) {
+        User currentUser = getCurrentUserOrThrow();
+        Sound sound = getPublicSound(soundId);
+
+        savedSoundRepository.findByUserIdAndSoundId(currentUser.getId(), soundId).ifPresent(savedSound -> {
+            savedSoundRepository.delete(savedSound);
+            soundRepository.decrementSavedCount(soundId);
+            sound.setSavedCount(Math.max(0L, sound.getSavedCount() == null ? 0L : sound.getSavedCount() - 1));
+        });
+
+        return soundMapper.toStatsDTO(sound, false);
     }
 
     @Override
@@ -79,6 +133,7 @@ public class SoundServiceImpl implements ISoundService {
                 .isActive(true)
                 .isDeleted(false)
                 .usageCount(0L)
+                .savedCount(0L)
                 .build();
 
         return soundMapper.toResponseDTO(soundRepository.save(sound));
@@ -139,5 +194,13 @@ public class SoundServiceImpl implements ISoundService {
         }
 
         return userRepo.findByEmail(email).orElse(null);
+    }
+
+    private User getCurrentUserOrThrow() {
+        User user = getCurrentUserOrNull();
+        if (user == null) {
+            throw new AppException(ErrorCode.UNAUTHORIZED);
+        }
+        return user;
     }
 }

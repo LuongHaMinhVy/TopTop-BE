@@ -31,9 +31,8 @@ public class OAuth2SuccessHandler extends SimpleUrlAuthenticationSuccessHandler 
     private final ICookieService ICookieService;
     private final OAuth2StateCache oAuth2StateCache;
     private final AuthResponseMapper authResponseMapper;
-
-    @Value("${frontend.url}")
-    private String frontendUrl;
+    private final FrontendProperties frontendProperties;
+    private final OAuth2RedirectBaseCookieService redirectBaseCookieService;
 
     @Value("${jwt.refresh-token-expiration}")
     private Long refreshTokenExpiration;
@@ -60,7 +59,8 @@ public class OAuth2SuccessHandler extends SimpleUrlAuthenticationSuccessHandler 
         ICookieService.add(response, "refreshToken", refreshToken,
                 (int)(refreshTokenExpiration / 1000), request);
 
-        String redirectUrl = frontendUrl + "/oauth2/callback?state=" + stateKey;
+        String redirectUrl = redirectBaseCookieService.resolveOrDefault(request) + "/oauth2/callback?state=" + stateKey;
+        redirectBaseCookieService.clear(response);
         log.info("OAuth2 login success for: {}", email);
         getRedirectStrategy().sendRedirect(request, response, redirectUrl);
     }

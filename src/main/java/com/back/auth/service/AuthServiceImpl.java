@@ -10,6 +10,7 @@ import com.back.common.service.emailservice.EmailService;
 import com.back.common.utils.Translator;
 import com.back.common.utils.exception.AppException;
 import com.back.common.utils.exception.ErrorCode;
+import com.back.config.FrontendProperties;
 import com.back.user.mapper.UserInfoMapper;
 import com.back.user.model.dto.response.UserInfo;
 import com.back.user.model.entity.*;
@@ -49,15 +50,13 @@ public class AuthServiceImpl implements IAuthService {
     private final VerificationTokenService verificationTokenService;
     private final Translator translator;
     private final UserInfoMapper userInfoMapper;
+    private final FrontendProperties frontendProperties;
 
     @Value("${jwt.access-token-expiration}")
     private Long accessTokenExpiration;
 
     @Value("${jwt.refresh-token-expiration}")
     private Long refreshTokenExpiration;
-
-    @Value("${frontend.url}")
-    private String frontendUrl;
 
     @Transactional
     @Override
@@ -142,6 +141,10 @@ public class AuthServiceImpl implements IAuthService {
     @Override
     @Transactional
     public void register(RegisterRequest registerRequest) {
+        if (isReservedUserUsername(registerRequest.getUsername())) {
+            throw new AppException(ErrorCode.USERNAME_ALREADY_EXISTS);
+        }
+
         if (userRepo.existsByEmail(registerRequest.getEmail())) {
             throw new AppException(ErrorCode.EMAIL_ALREADY_EXISTS);
         }
@@ -231,7 +234,7 @@ public class AuthServiceImpl implements IAuthService {
         String resetToken = UUID.randomUUID().toString();
         verificationTokenService.savePasswordResetToken(email, resetToken);
 
-        String resetLink = frontendUrl + "/reset-password?token=" + resetToken;
+        String resetLink = frontendProperties.getPrimaryUrl() + "/reset-password?token=" + resetToken;
         String subject = Translator.toLocale("email.forgot_password.subject");
         String htmlContent = buildPasswordResetEmail(user.getNickname(), resetLink);
 
@@ -288,7 +291,7 @@ public class AuthServiceImpl implements IAuthService {
         String token = UUID.randomUUID().toString();
         verificationTokenService.saveVerificationToken(user.getEmail(), token);
 
-        String verificationLink = frontendUrl + "/verify-email?token=" + token;
+        String verificationLink = frontendProperties.getPrimaryUrl() + "/verify-email?token=" + token;
         String subject = Translator.toLocale("email.verify.subject");
         String htmlContent = buildVerificationEmail(user.getNickname(), verificationLink);
 
@@ -424,6 +427,10 @@ public class AuthServiceImpl implements IAuthService {
             throw new AppException(ErrorCode.BAD_REQUEST, "User is already onboarded");
         }
 
+        if (isReservedUserUsername(onboardRequest.getUsername())) {
+            throw new AppException(ErrorCode.USERNAME_ALREADY_EXISTS);
+        }
+
         if (!user.getUsername().equals(onboardRequest.getUsername()) && userRepo.existsByUsername(onboardRequest.getUsername())) {
             throw new AppException(ErrorCode.USERNAME_ALREADY_EXISTS);
         }
@@ -450,5 +457,9 @@ public class AuthServiceImpl implements IAuthService {
                 .tokenType("Bearer")
                 .expiresIn(accessTokenExpiration)
                 .build();
+    }
+
+    private boolean isReservedUserUsername(String username) {
+        return username != null && "admin".equalsIgnoreCase(username.trim());
     }
 }

@@ -24,6 +24,7 @@ public class SoundDetailResponseDTO {
     private SoundAuthorResponseDTO owner;
     private Long sourceVideoId;
     private SoundStatsResponseDTO stats;
+    private Boolean isSaved;
     private Boolean canUse;
     private Boolean canEdit;
     private Boolean isPublic;

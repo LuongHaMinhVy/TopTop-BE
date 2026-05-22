@@ -53,7 +53,7 @@ public class FollowServiceImpl implements IFollowService {
         User currentUser = getCurrentUser();
         if (currentUser == null) throw new AppException(ErrorCode.UNAUTHORIZED);
 
-        User targetUser = userRepo.findByUsername(targetUsername)
+        User targetUser = userRepo.findPublicUserByUsername(targetUsername)
                 .orElseThrow(() -> new AppException(ErrorCode.USER_NOT_FOUND));
 
         if (currentUser.equals(targetUser)) {
@@ -87,7 +87,7 @@ public class FollowServiceImpl implements IFollowService {
         User currentUser = getCurrentUser();
         if (currentUser == null) throw new AppException(ErrorCode.UNAUTHORIZED);
 
-        User targetUser = userRepo.findByUsername(targetUsername)
+        User targetUser = userRepo.findPublicUserByUsername(targetUsername)
                 .orElseThrow(() -> new AppException(ErrorCode.USER_NOT_FOUND));
 
         followRepo.findByFollowerAndFollowing(currentUser, targetUser)
@@ -125,7 +125,7 @@ public class FollowServiceImpl implements IFollowService {
         User currentUser = getCurrentUser();
         if (currentUser == null) return Page.empty();
 
-        return followRepo.findByFollower(currentUser, pageable)
+        return followRepo.findPublicFollowingByFollower(currentUser, pageable)
                 .map(follow -> userInfoMapper.buildUserInfo(follow.getFollowing()));
     }
 }

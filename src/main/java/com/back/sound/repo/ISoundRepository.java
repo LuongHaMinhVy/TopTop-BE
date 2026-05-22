@@ -55,4 +55,12 @@ public interface ISoundRepository extends JpaRepository<Sound, Long> {
     @Modifying
     @Query("UPDATE Sound s SET s.usageCount = CASE WHEN s.usageCount > 0 THEN s.usageCount - 1 ELSE 0 END WHERE s.id = :soundId")
     void decrementUsageCount(@Param("soundId") Long soundId);
+
+    @Modifying
+    @Query("UPDATE Sound s SET s.savedCount = s.savedCount + 1 WHERE s.id = :soundId")
+    void incrementSavedCount(@Param("soundId") Long soundId);
+
+    @Modifying
+    @Query("UPDATE Sound s SET s.savedCount = CASE WHEN s.savedCount > 0 THEN s.savedCount - 1 ELSE 0 END WHERE s.id = :soundId")
+    void decrementSavedCount(@Param("soundId") Long soundId);
 }

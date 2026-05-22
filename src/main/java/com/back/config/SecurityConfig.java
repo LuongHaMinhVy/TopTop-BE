@@ -6,6 +6,7 @@ import com.back.common.utils.Translator;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import jakarta.servlet.http.HttpServletResponse;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.boot.context.properties.EnableConfigurationProperties;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.http.HttpMethod;
@@ -17,6 +18,7 @@ import org.springframework.security.config.annotation.web.configurers.AbstractHt
 import org.springframework.security.config.http.SessionCreationPolicy;
 import org.springframework.security.web.SecurityFilterChain;
 import org.springframework.security.web.authentication.UsernamePasswordAuthenticationFilter;
+import org.springframework.security.oauth2.client.web.OAuth2AuthorizationRequestRedirectFilter;
 import org.springframework.web.cors.CorsConfiguration;
 import org.springframework.web.cors.CorsConfigurationSource;
 import org.springframework.web.cors.UrlBasedCorsConfigurationSource;
@@ -31,16 +33,16 @@ import java.util.List;
 
 @Configuration
 @RequiredArgsConstructor
+@EnableConfigurationProperties(FrontendProperties.class)
 public class SecurityConfig {
-
-    @Value("${cors.allowed-origins}")
-    private List<String> allowedOrigins;
     
     private final JwtAuthFilter jwtAuthFilter;
     private final ObjectMapper objectMapper;
     private final CustomOAuth2UserService customOAuth2UserService;
     private final OAuth2SuccessHandler   oauth2SuccessHandler;
     private final OAuth2FailureHandler   oauth2FailureHandler;
+    private final FrontendProperties frontendProperties;
+    private final OAuth2RedirectBaseFilter oauth2RedirectBaseFilter;
 
     @Bean
     public SecurityFilterChain securityFilterChain(HttpSecurity http) throws Exception {
@@ -112,6 +114,12 @@ public class SecurityConfig {
                         .hasAnyAuthority(RoleName.ROLE_USER.name(), RoleName.ROLE_ADMIN.name())
 
                         // ── Sound endpoints ──────────────────────────────────────
+                        .requestMatchers(HttpMethod.GET, "/api/v1/sounds/favorites")
+                        .hasAnyAuthority(RoleName.ROLE_USER.name(), RoleName.ROLE_ADMIN.name())
+                        .requestMatchers(HttpMethod.POST, "/api/v1/sounds/*/save")
+                        .hasAnyAuthority(RoleName.ROLE_USER.name(), RoleName.ROLE_ADMIN.name())
+                        .requestMatchers(HttpMethod.DELETE, "/api/v1/sounds/*/save")
+                        .hasAnyAuthority(RoleName.ROLE_USER.name(), RoleName.ROLE_ADMIN.name())
                         .requestMatchers(HttpMethod.GET, "/api/v1/sounds/**").permitAll()
 
                         // ── Track endpoints ──────────────────────────────────────
@@ -163,6 +171,7 @@ public class SecurityConfig {
 
                 .formLogin(AbstractHttpConfigurer::disable)
 
+                .addFilterBefore(oauth2RedirectBaseFilter, OAuth2AuthorizationRequestRedirectFilter.class)
                 .addFilterBefore(jwtAuthFilter, UsernamePasswordAuthenticationFilter.class)
 
                 .oauth2Login(oauth2 -> oauth2
@@ -184,7 +193,7 @@ public class SecurityConfig {
     @Bean
     public CorsConfigurationSource corsConfigurationSource() {
         CorsConfiguration configuration = new CorsConfiguration();
-        configuration.setAllowedOriginPatterns(allowedOrigins);
+        configuration.setAllowedOriginPatterns(frontendProperties.getUrls());
         configuration.setAllowedMethods(List.of("GET", "POST", "PUT", "DELETE", "PATCH", "OPTIONS"));
         configuration.setAllowedHeaders(List.of("*"));
         configuration.setExposedHeaders(List.of("Authorization"));

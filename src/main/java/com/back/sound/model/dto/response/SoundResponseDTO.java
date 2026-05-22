@@ -22,6 +22,7 @@ public class SoundResponseDTO {
     private Boolean originalSound;
     private SoundAuthorResponseDTO owner;
     private SoundStatsResponseDTO stats;
+    private Boolean isSaved;
     private Boolean isPublic;
     private Boolean isActive;
     private LocalDateTime createdAt;

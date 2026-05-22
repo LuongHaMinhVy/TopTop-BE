@@ -12,6 +12,7 @@ import com.back.user.repo.IUserRepo;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.cache.annotation.Cacheable;
+import org.springframework.data.domain.PageRequest;
 import org.springframework.security.core.Authentication;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.security.oauth2.client.authentication.OAuth2AuthenticationToken;
@@ -72,7 +73,7 @@ public class UserServiceImpl implements IUserService {
     @Override
     public UserInfo getUserProfile(String username) {
         log.info("Fetching UserInfo for profile: {}", username);
-        User targetUser = userRepo.findByUsername(username)
+        User targetUser = userRepo.findPublicUserByUsername(username)
                 .orElseThrow(() -> new AppException(ErrorCode.USER_NOT_FOUND));
 
         User currentUser = getCurrentUser();
@@ -88,10 +89,10 @@ public class UserServiceImpl implements IUserService {
     public List<MentionSuggestionResponseDTO> getMentionSuggestions(String keyword) {
         List<User> users;
         if (keyword == null || keyword.trim().isEmpty()) {
-            users = userRepo.findTop10ByOrderByCreatedAtDesc();
+            users = userRepo.findRecentPublicUsers(PageRequest.of(0, 10));
         } else {
             String q = keyword.trim();
-            users = userRepo.findTop10ByUsernameContainingIgnoreCaseOrNicknameContainingIgnoreCase(q, q);
+            users = userRepo.findPublicMentionSuggestions(q, PageRequest.of(0, 10));
         }
 
         return users.stream().map(u -> MentionSuggestionResponseDTO.builder()
@@ -113,6 +114,9 @@ public class UserServiceImpl implements IUserService {
 
         // Validate username uniqueness if changed
         if (!currentUser.getUsername().equals(request.getUsername())) {
+            if (isReservedUserUsername(request.getUsername())) {
+                throw new AppException(ErrorCode.USERNAME_ALREADY_EXISTS);
+            }
             if (userRepo.existsByUsername(request.getUsername())) {
                 throw new AppException(ErrorCode.USERNAME_ALREADY_EXISTS);
             }
@@ -156,5 +160,9 @@ public class UserServiceImpl implements IUserService {
         
         String key = "avatars/" + java.util.UUID.randomUUID() + ext;
         return storageService.uploadFile(file, key);
+    }
+
+    private boolean isReservedUserUsername(String username) {
+        return username != null && "admin".equalsIgnoreCase(username.trim());
     }
 }

@@ -31,7 +31,7 @@ public class UserBlockServiceImpl implements IUserBlockService {
     @Transactional
     public void blockUser(String username) {
         User currentUser = getCurrentUserOrThrow();
-        User targetUser = userRepo.findByUsername(username)
+        User targetUser = userRepo.findPublicUserByUsername(username)
                 .orElseThrow(() -> new AppException(ErrorCode.USER_NOT_FOUND));
 
         if (currentUser.getId().equals(targetUser.getId())) {
@@ -53,7 +53,7 @@ public class UserBlockServiceImpl implements IUserBlockService {
     @Transactional
     public void unblockUser(String username) {
         User currentUser = getCurrentUserOrThrow();
-        User targetUser = userRepo.findByUsername(username)
+        User targetUser = userRepo.findPublicUserByUsername(username)
                 .orElseThrow(() -> new AppException(ErrorCode.USER_NOT_FOUND));
 
         userBlockRepo.findByBlockerAndBlocked(currentUser, targetUser)
@@ -64,7 +64,7 @@ public class UserBlockServiceImpl implements IUserBlockService {
     @Transactional(readOnly = true)
     public Page<UserInfo> getBlockedUsers(Pageable pageable) {
         User currentUser = getCurrentUserOrThrow();
-        return userBlockRepo.findByBlocker(currentUser, pageable)
+        return userBlockRepo.findPublicBlockedByBlocker(currentUser, pageable)
                 .map(block -> userInfoMapper.buildUserInfo(block.getBlocked()));
     }
 

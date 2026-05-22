@@ -1,5 +1,6 @@
 package com.back.search.model.dto.response;
 
+import com.back.sound.model.dto.response.SoundResponseDTO;
 import lombok.Builder;
 import lombok.Data;
 
@@ -18,4 +19,5 @@ public class SearchVideoResponseDTO {
     private Long commentCount;
     private LocalDateTime createdAt;
     private SearchUserResponseDTO author;
+    private SoundResponseDTO sound;
 }

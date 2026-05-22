@@ -5,6 +5,8 @@ import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
 import org.springframework.stereotype.Service;
 
+import java.net.URI;
+
 @Service
 public class ICookieServiceImpl implements ICookieService{
 
@@ -33,8 +35,8 @@ public class ICookieServiceImpl implements ICookieService{
         String cookieName = getCookieName(request, name);
 
         String cookieHeader = String.format(
-                "%s=%s; Max-Age=%d; Path=/; HttpOnly; SameSite=Lax",
-                cookieName, value, maxAge
+                "%s=%s; Max-Age=%d; Path=/; HttpOnly; %s",
+                cookieName, value, maxAge, getSameSiteCookieAttributes(request)
         );
         response.addHeader("Set-Cookie", cookieHeader);
     }
@@ -43,10 +45,37 @@ public class ICookieServiceImpl implements ICookieService{
     public void clear(HttpServletResponse response, String name, HttpServletRequest request) {
         String cookieName = getCookieName(request, name);
         String cookieHeader = String.format(
-                "%s=; Max-Age=0; Path=/; HttpOnly; SameSite=Lax",
-                cookieName
+                "%s=; Max-Age=0; Path=/; HttpOnly; %s",
+                cookieName, getSameSiteCookieAttributes(request)
         );
         response.addHeader("Set-Cookie", cookieHeader);
+    }
+
+    private String getSameSiteCookieAttributes(HttpServletRequest request) {
+        if (isCrossSiteSecureRequest(request)) {
+            return "SameSite=None; Secure";
+        }
+        return "SameSite=Lax";
+    }
+
+    private boolean isCrossSiteSecureRequest(HttpServletRequest request) {
+        String origin = request.getHeader("Origin");
+        if (origin == null || origin.isBlank()) {
+            return false;
+        }
+
+        boolean secureRequest = request.isSecure()
+                || "https".equalsIgnoreCase(request.getHeader("X-Forwarded-Proto"));
+        if (!secureRequest) {
+            return false;
+        }
+
+        try {
+            String originHost = URI.create(origin).getHost();
+            return originHost != null && !originHost.equalsIgnoreCase(request.getServerName());
+        } catch (IllegalArgumentException ignored) {
+            return false;
+        }
     }
 
     private String getCookieName(HttpServletRequest request, String name) {

@@ -16,14 +16,16 @@ public interface INotificationRepo extends JpaRepository<Notification, Long> {
     
     @Query("SELECT n FROM Notification n " +
             "JOIN FETCH n.actor " +
-            "LEFT JOIN FETCH n.video " +
+            "LEFT JOIN FETCH n.video v " +
+            "LEFT JOIN FETCH v.user " +
             "WHERE n.recipient = :recipient " +
             "ORDER BY n.createdAt DESC")
     List<Notification> findByRecipientWithDetails(User recipient);
 
     @Query(value = "SELECT n FROM Notification n " +
             "JOIN FETCH n.actor " +
-            "LEFT JOIN FETCH n.video " +
+            "LEFT JOIN FETCH n.video v " +
+            "LEFT JOIN FETCH v.user " +
             "WHERE n.recipient = :recipient " +
             "ORDER BY n.createdAt DESC",
             countQuery = "SELECT COUNT(n) FROM Notification n WHERE n.recipient = :recipient")
@@ -31,4 +33,3 @@ public interface INotificationRepo extends JpaRepository<Notification, Long> {
 
     long countByRecipientAndIsReadFalse(User recipient);
 }
-

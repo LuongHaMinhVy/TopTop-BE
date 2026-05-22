@@ -145,7 +145,7 @@ public class VideoServiceImpl implements IVideoService {
         video = videoRepository.save(video);
 
         if (selectedSound == null) {
-            Sound originalSound = createOriginalSound(video, user, file, url, duration);
+            Sound originalSound = createOriginalSound(video, user, file, url, duration, requestDTO);
             video.setSound(originalSound);
             video = videoRepository.save(video);
         } else {
@@ -258,6 +258,18 @@ public class VideoServiceImpl implements IVideoService {
             );
         }
 
+        videoRepostRepository.findByVideoIdWithUser(video.getId()).stream()
+                .map(VideoRepost::getUser)
+                .filter(repostUser -> !repostUser.getId().equals(video.getUser().getId()))
+                .filter(repostUser -> !repostUser.getId().equals(currentUser.getId()))
+                .forEach(repostUser -> notificationService.createNotification(
+                        repostUser,
+                        currentUser,
+                        video,
+                        "REPOST_LIKE",
+                        currentUser.getUsername() + " liked a video you reposted: " + video.getTitle()
+                ));
+
         return mapToStatsDTO(video, true);
     }
 
@@ -304,6 +316,14 @@ public class VideoServiceImpl implements IVideoService {
                     .user(currentUser)
                     .video(video)
                     .build());
+
+            notificationService.createNotification(
+                    video.getUser(),
+                    currentUser,
+                    video,
+                    "REPOST",
+                    currentUser.getUsername() + " reposted your video: " + video.getTitle()
+            );
         }
 
         return mapToStatsDTO(video, videoLikeRepository.existsByUserIdAndVideoId(currentUser.getId(), id));
@@ -483,15 +503,18 @@ public class VideoServiceImpl implements IVideoService {
         return sound;
     }
 
-    private Sound createOriginalSound(Video video, User user, MultipartFile file, String videoUrl, Integer duration) {
+    private Sound createOriginalSound(Video video, User user, MultipartFile file, String videoUrl, Integer duration, VideoUploadRequestDTO requestDTO) {
         String audioUrl = audioProcessingService.extractAudioUrl(file, videoUrl);
+        String coverUrl = Boolean.TRUE.equals(requestDTO.getUseAvatarAsSoundCover()) && user.getAvatarUrl() != null
+                ? user.getAvatarUrl()
+                : video.getThumbnailUrl();
         Sound sound = Sound.builder()
                 .title("original sound - @" + user.getUsername())
-                .artistName(user.getNickname() != null ? user.getNickname() : user.getUsername())
+                .artistName(user.getUsername())
                 .description(video.getDescription())
                 .type(SoundType.ORIGINAL)
                 .audioUrl(audioUrl)
-                .coverUrl(video.getThumbnailUrl())
+                .coverUrl(coverUrl)
                 .durationSeconds(duration == null ? 0 : duration)
                 .owner(user)
                 .sourceVideo(video)
@@ -689,7 +712,7 @@ public class VideoServiceImpl implements IVideoService {
 
     @Override
     public Page<VideoResponseDTO> getRepostedVideosByUsername(String username, Pageable pageable) {
-        userRepo.findByUsername(username)
+        userRepo.findPublicUserByUsername(username)
                 .orElseThrow(() -> new AppException(ErrorCode.USER_NOT_FOUND));
 
         User currentUser = getCurrentUser();

@@ -114,7 +114,7 @@ public class CustomOAuth2UserService extends DefaultOAuth2UserService {
         String baseUsername = email.split("@")[0].replaceAll("[^a-zA-Z0-9_]", "_");
         String username = baseUsername;
         int suffix = 1;
-        while (userRepo.existsByUsername(username)) {
+        while (isReservedUserUsername(username) || userRepo.existsByUsername(username)) {
             username = baseUsername + "_" + suffix++;
         }
 
@@ -152,5 +152,9 @@ public class CustomOAuth2UserService extends DefaultOAuth2UserService {
             log.error("Email not found from OAuth2 provider: {}", provider);
             throw new AppException(ErrorCode.OAUTH2_EMAIL_NOT_FOUND);
         }
+    }
+
+    private boolean isReservedUserUsername(String username) {
+        return username != null && "admin".equalsIgnoreCase(username.trim());
     }
 }

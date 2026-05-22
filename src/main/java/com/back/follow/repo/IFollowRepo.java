@@ -18,6 +18,17 @@ public interface IFollowRepo extends JpaRepository<Follow, Long> {
     java.util.List<Follow> findByFollower(User follower);
     Page<Follow> findByFollower(User follower, Pageable pageable);
 
+    @Query("""
+            SELECT f FROM Follow f
+            WHERE f.follower = :follower
+              AND LOWER(f.following.username) <> 'admin'
+              AND NOT EXISTS (
+                  SELECT r.id FROM f.following.roles r
+                  WHERE r.name = com.back.user.model.enums.RoleName.ROLE_ADMIN
+              )
+            """)
+    Page<Follow> findPublicFollowingByFollower(@Param("follower") User follower, Pageable pageable);
+
     long countByFollower(User follower);
     long countByFollowing(User following);
 

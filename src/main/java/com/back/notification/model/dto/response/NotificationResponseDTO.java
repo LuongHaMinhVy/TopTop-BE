@@ -22,5 +22,6 @@ public class NotificationResponseDTO {
     private String actorAvatarUrl;
     
     private Long videoId;
+    private String videoOwnerUsername;
     private String videoThumbnailUrl;
 }

@@ -83,6 +83,7 @@ public class NotificationServiceImpl implements INotificationService {
                 .actorUsername(notification.getActor().getUsername())
                 .actorAvatarUrl(notification.getActor().getAvatarUrl())
                 .videoId(notification.getVideo() != null ? notification.getVideo().getId() : null)
+                .videoOwnerUsername(notification.getVideo() != null ? notification.getVideo().getUser().getUsername() : null)
                 .videoThumbnailUrl(notification.getVideo() != null ? notification.getVideo().getThumbnailUrl() : null)
                 .build();
     }

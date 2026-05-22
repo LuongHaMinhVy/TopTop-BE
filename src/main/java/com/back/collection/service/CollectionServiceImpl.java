@@ -22,6 +22,7 @@ import com.back.video.repo.IVideoLikeRepository;
 import com.back.video.repo.IVideoRepository;
 import com.back.video.repo.IVideoRepostRepository;
 import com.back.follow.repo.IFollowRepo;
+import com.back.notification.service.INotificationService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
@@ -48,6 +49,7 @@ public class CollectionServiceImpl implements ICollectionService {
     private final IVideoLikeRepository videoLikeRepository;
     private final IVideoRepostRepository videoRepostRepository;
     private final IFollowRepo followRepo;
+    private final INotificationService notificationService;
 
     @Override
     @Transactional(readOnly = true)
@@ -71,6 +73,13 @@ public class CollectionServiceImpl implements ICollectionService {
                     .build());
             video.setSaveCount(getSaveCount(video) + 1);
             videoRepository.save(video);
+            notificationService.createNotification(
+                    video.getUser(),
+                    user,
+                    video,
+                    "SAVE",
+                    user.getUsername() + " saved your video: " + video.getTitle()
+            );
         }
 
         return mapToVideoResponseDTO(video, user, true);
@@ -109,7 +118,7 @@ public class CollectionServiceImpl implements ICollectionService {
     @Override
     @Transactional(readOnly = true)
     public List<CollectionResponseDTO> getUserCollections(String username) {
-        User owner = userRepo.findByUsername(username)
+        User owner = userRepo.findPublicUserByUsername(username)
                 .orElseThrow(() -> new AppException(ErrorCode.USER_NOT_FOUND));
         User currentUser = getCurrentUserOrNull();
         assertCanViewOwner(currentUser, owner);
@@ -254,11 +263,16 @@ public class CollectionServiceImpl implements ICollectionService {
     }
 
     private VideoCollection getCollectionForProfileOrThrow(String username, Long collectionId) {
+        User publicOwner = userRepo.findPublicUserByUsername(username)
+                .orElseThrow(() -> new AppException(ErrorCode.USER_NOT_FOUND));
         VideoCollection collection = IVideoCollectionRepository.findByIdAndUserUsernameIgnoreCase(collectionId, username)
                 .orElseThrow(() -> new AppException(ErrorCode.COLLECTION_NOT_FOUND));
 
         User currentUser = getCurrentUserOrNull();
         User owner = collection.getUser();
+        if (!owner.getId().equals(publicOwner.getId())) {
+            throw new AppException(ErrorCode.COLLECTION_NOT_FOUND);
+        }
         assertCanViewOwner(currentUser, owner);
 
         boolean isOwner = currentUser != null && currentUser.getId().equals(owner.getId());
