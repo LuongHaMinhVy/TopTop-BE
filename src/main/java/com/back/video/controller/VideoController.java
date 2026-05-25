@@ -3,6 +3,9 @@ package com.back.video.controller;
 import com.back.common.model.dto.response.ApiResponse;
 import com.back.common.utils.Translator;
 import com.back.video.model.dto.request.VideoResponseDTO;
+import com.back.video.model.dto.request.InitVideoUploadRequestDTO;
+import com.back.video.model.dto.request.CompleteVideoUploadRequestDTO;
+import com.back.video.model.dto.response.InitVideoUploadResponseDTO;
 import com.back.video.model.dto.response.VideoDailyMetricResponseDTO;
 import com.back.video.model.dto.response.VideoStatsResponseDTO;
 import com.back.video.model.dto.response.VideoUploadRequestDTO;
@@ -18,6 +21,7 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.web.multipart.MultipartFile;
 import com.back.common.model.dto.response.Meta;
+import com.back.common.utils.redis.RateLimit;
 
 import java.io.IOException;
 import java.time.LocalDateTime;
@@ -32,6 +36,7 @@ public class VideoController {
     private final IVideoService videoService;
 
     @PostMapping(value = "/upload", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
+    @RateLimit(limit = 10, durationInSeconds = 300)
     public ResponseEntity<ApiResponse<VideoResponseDTO>> uploadVideo(
             @RequestPart("file") MultipartFile file,
             @RequestPart(value = "cover", required = false) MultipartFile cover,
@@ -39,6 +44,32 @@ public class VideoController {
         VideoResponseDTO data = videoService.uploadVideo(file, cover, requestDTO);
         return ResponseEntity.ok(ApiResponse.<VideoResponseDTO>builder()
                 .message(Translator.toLocale("video.upload.success", "Video uploaded successfully"))
+                .data(data)
+                .status(HttpStatus.OK.value())
+                .timestamp(LocalDateTime.now())
+                .build());
+    }
+
+    @PostMapping("/init")
+    @RateLimit(limit = 10, durationInSeconds = 300)
+    public ResponseEntity<ApiResponse<InitVideoUploadResponseDTO>> initUpload(@Valid @RequestBody InitVideoUploadRequestDTO requestDTO) {
+        InitVideoUploadResponseDTO data = videoService.initVideoUpload(requestDTO);
+        return ResponseEntity.ok(ApiResponse.<InitVideoUploadResponseDTO>builder()
+                .message("Upload session initialized")
+                .data(data)
+                .status(HttpStatus.OK.value())
+                .timestamp(LocalDateTime.now())
+                .build());
+    }
+
+    @PostMapping(value = "/complete", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
+    @RateLimit(limit = 10, durationInSeconds = 300)
+    public ResponseEntity<ApiResponse<VideoResponseDTO>> completeUpload(
+            @RequestPart(value = "cover", required = false) MultipartFile cover,
+            @RequestPart("data") @Valid CompleteVideoUploadRequestDTO requestDTO) {
+        VideoResponseDTO data = videoService.completeVideoUpload(requestDTO, cover);
+        return ResponseEntity.ok(ApiResponse.<VideoResponseDTO>builder()
+                .message("Video upload completed")
                 .data(data)
                 .status(HttpStatus.OK.value())
                 .timestamp(LocalDateTime.now())
@@ -100,6 +131,7 @@ public class VideoController {
     }
 
     @PostMapping("/{id}/report")
+    @RateLimit(limit = 5, durationInSeconds = 60)
     public ResponseEntity<ApiResponse<Void>> reportVideo(@PathVariable Long id, @RequestBody Map<String, String> payload) {
         String reason = payload.getOrDefault("reason", "Inappropriate content");
         videoService.reportVideo(id, reason);
@@ -111,6 +143,7 @@ public class VideoController {
     }
 
     @PostMapping("/{id}/like")
+    @RateLimit(limit = 30, durationInSeconds = 60)
     public ResponseEntity<ApiResponse<VideoStatsResponseDTO>> likeVideo(@PathVariable Long id) {
         VideoStatsResponseDTO data = videoService.likeVideo(id);
         return ResponseEntity.ok(ApiResponse.<VideoStatsResponseDTO>builder()
@@ -133,6 +166,7 @@ public class VideoController {
     }
 
     @PostMapping("/{id}/repost")
+    @RateLimit(limit = 30, durationInSeconds = 60)
     public ResponseEntity<ApiResponse<VideoStatsResponseDTO>> repostVideo(@PathVariable Long id) {
         VideoStatsResponseDTO data = videoService.repostVideo(id);
         return ResponseEntity.ok(ApiResponse.<VideoStatsResponseDTO>builder()
@@ -155,6 +189,7 @@ public class VideoController {
     }
 
     @PostMapping("/{id}/view")
+    @RateLimit(limit = 50, durationInSeconds = 60)
     public ResponseEntity<ApiResponse<VideoStatsResponseDTO>> recordVideoView(@PathVariable Long id) {
         VideoStatsResponseDTO data = videoService.recordVideoView(id);
         return ResponseEntity.ok(ApiResponse.<VideoStatsResponseDTO>builder()

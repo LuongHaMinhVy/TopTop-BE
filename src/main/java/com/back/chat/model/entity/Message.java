@@ -51,4 +51,7 @@ public class Message extends BaseEntity {
 
     @Column(name = "deleted_at")
     private LocalDateTime deletedAt;
+
+    @Column(name = "hidden_for_user_ids", columnDefinition = "TEXT")
+    private String hiddenForUserIds;
 }

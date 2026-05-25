@@ -10,6 +10,7 @@ import software.amazon.awssdk.services.s3.S3Client;
 import software.amazon.awssdk.services.s3.model.*;
 import software.amazon.awssdk.services.s3.presigner.S3Presigner;
 import software.amazon.awssdk.services.s3.presigner.model.GetObjectPresignRequest;
+import software.amazon.awssdk.services.s3.presigner.model.PutObjectPresignRequest;
 import software.amazon.awssdk.transfer.s3.S3TransferManager;
 import software.amazon.awssdk.transfer.s3.model.UploadFileRequest;
 
@@ -86,6 +87,15 @@ public class R2StorageService {
                 GetObjectPresignRequest.builder()
                         .signatureDuration(duration)
                         .getObjectRequest(r -> r.bucket(props.bucketName()).key(key))
+                        .build()
+        ).url().toString();
+    }
+
+    public String generatePresignedUploadUrl(String key, String contentType, Duration duration) {
+        return s3Presigner.presignPutObject(
+                PutObjectPresignRequest.builder()
+                        .signatureDuration(duration)
+                        .putObjectRequest(r -> r.bucket(props.bucketName()).key(key).contentType(contentType))
                         .build()
         ).url().toString();
     }

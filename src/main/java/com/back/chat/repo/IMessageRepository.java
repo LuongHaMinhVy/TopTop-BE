@@ -18,6 +18,17 @@ public interface IMessageRepository extends JpaRepository<Message, Long> {
     Page<Message> findByConversationOrderByCreatedAtDesc(Conversation conversation, Pageable pageable);
     Optional<Message> findBySenderIdAndClientMessageId(Long senderId, String clientMessageId);
 
+    @Query("SELECT m FROM Message m " +
+           "WHERE m.conversation = :conversation " +
+           "AND m.deletedAt IS NULL " +
+           "AND (m.hiddenForUserIds IS NULL OR m.hiddenForUserIds NOT LIKE :hiddenToken) " +
+           "ORDER BY m.createdAt DESC")
+    Page<Message> findVisibleByConversationForUser(
+            @Param("conversation") Conversation conversation,
+            @Param("hiddenToken") String hiddenToken,
+            Pageable pageable
+    );
+
     @Query("SELECT COUNT(m) FROM Message m " +
            "WHERE m.conversation = :conversation " +
            "AND m.sender <> :currentUser " +

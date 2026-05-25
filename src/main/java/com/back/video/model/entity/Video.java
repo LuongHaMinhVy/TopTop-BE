@@ -1,7 +1,9 @@
 package com.back.video.model.entity;
 
 import com.back.common.model.entity.BaseEntity;
+import com.back.moderation.model.enums.MusicCopyrightStatus;
 import com.back.hashtag.model.entity.Hashtag;
+import com.back.moderation.model.enums.VideoModerationStatus;
 import com.back.sound.model.entity.Sound;
 import com.back.user.model.entity.User;
 import com.back.video.model.enums.VideoVisibility;
@@ -86,6 +88,34 @@ public class Video extends BaseEntity {
 
     @Column(name = "deleted_at")
     private LocalDateTime deletedAt;
+
+    @Enumerated(EnumType.STRING)
+    @Column(name = "moderation_status", nullable = false)
+    @Builder.Default
+    private VideoModerationStatus moderationStatus = VideoModerationStatus.PENDING;
+
+    @Column(name = "moderation_checked_at")
+    private LocalDateTime moderationCheckedAt;
+
+    @Column(name = "moderation_reason_code")
+    private String moderationReasonCode;
+
+    @Column(name = "moderation_reason_message", columnDefinition = "TEXT")
+    private String moderationReasonMessage;
+
+    @Enumerated(EnumType.STRING)
+    @Column(name = "music_copyright_status", nullable = false)
+    @Builder.Default
+    private MusicCopyrightStatus musicCopyrightStatus = MusicCopyrightStatus.PENDING;
+
+    @Column(name = "music_copyright_checked_at")
+    private LocalDateTime musicCopyrightCheckedAt;
+
+    @Column(name = "music_copyright_reason_code")
+    private String musicCopyrightReasonCode;
+
+    @Column(name = "music_copyright_reason_message", columnDefinition = "TEXT")
+    private String musicCopyrightReasonMessage;
 
     public boolean isDeleted() {
         return deletedAt != null;

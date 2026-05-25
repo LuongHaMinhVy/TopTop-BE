@@ -36,6 +36,14 @@ public interface IVideoRepostRepository extends JpaRepository<VideoRepost, Long>
             WHERE LOWER(vr.user.username) = LOWER(:username)
               AND vr.video.deletedAt IS NULL
               AND (
+                    :viewerId IS NOT NULL
+                    AND vr.video.user.id = :viewerId
+                    OR (
+                        vr.video.moderationStatus = com.back.moderation.model.enums.VideoModerationStatus.APPROVED
+                        AND vr.video.musicCopyrightStatus <> com.back.moderation.model.enums.MusicCopyrightStatus.REJECTED
+                    )
+              )
+              AND (
                 (
                     vr.video.visibility = com.back.video.model.enums.VideoVisibility.PUBLIC
                     AND (

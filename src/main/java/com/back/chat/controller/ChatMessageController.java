@@ -5,6 +5,7 @@ import com.back.chat.model.dto.response.MessageResponseDTO;
 import com.back.chat.service.IChatMessageService;
 import com.back.common.model.dto.response.ApiResponse;
 import com.back.common.model.dto.response.Meta;
+import com.back.common.utils.redis.RateLimit;
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
@@ -25,6 +26,7 @@ public class ChatMessageController {
     private final IChatMessageService chatMessageService;
 
     @PostMapping("/messages")
+    @RateLimit(limit = 20, durationInSeconds = 60)
     public ResponseEntity<ApiResponse<MessageResponseDTO>> sendMessage(
             @RequestBody SendMessageRequestDTO request,
             Authentication authentication
@@ -51,6 +53,20 @@ public class ChatMessageController {
                 .message("Messages retrieved successfully")
                 .data(page.getContent())
                 .meta(Meta.from(page))
+                .status(HttpStatus.OK.value())
+                .timestamp(LocalDateTime.now())
+                .build());
+    }
+
+    @DeleteMapping("/messages/{messageId}")
+    public ResponseEntity<ApiResponse<Void>> deleteMessage(
+            @PathVariable Long messageId,
+            Authentication authentication
+    ) {
+        chatMessageService.deleteMessage(authentication, messageId);
+
+        return ResponseEntity.ok(ApiResponse.<Void>builder()
+                .message("Message deleted successfully")
                 .status(HttpStatus.OK.value())
                 .timestamp(LocalDateTime.now())
                 .build());

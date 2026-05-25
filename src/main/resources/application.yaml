@@ -98,3 +98,24 @@ cloudflare:
     bucket-name: ${R2_BUCKET_NAME}
     endpoint: ${R2_ENDPOINT}
     public-url: ${R2_PUBLIC_URL}
+
+moderation:
+  auto-approve-threshold: 0.35
+  auto-reject-threshold: 0.85
+  text:
+    auto-reject-threshold: 0.35
+  frame-sampling:
+    max-frames: 8
+
+ai:
+  gemini:
+    enabled: ${GEMINI_ENABLED:true}
+    api-key: ${GEMINI_API_KEY:}
+    model: ${GEMINI_MODEL:gemini-2.5-flash}
+    endpoint: ${GEMINI_ENDPOINT:https://generativelanguage.googleapis.com/v1beta}
+
+acrcloud:
+  enabled: ${ACRCLOUD_ENABLED:false}
+  access-key: ${ACRCLOUD_ACCESS_KEY:}
+  access-secret: ${ACRCLOUD_ACCESS_SECRET:${ACRCLOUD_SECRET_KEY:}}
+  host: ${ACRCLOUD_HOST:}

@@ -26,6 +26,13 @@ public interface ISavedVideoRepository extends JpaRepository<SavedVideo, Long> {
             SELECT sv FROM SavedVideo sv
             WHERE sv.user.id = :userId
               AND sv.video.deletedAt IS NULL
+              AND (
+                    sv.video.user.id = :userId
+                    OR (
+                        sv.video.moderationStatus = com.back.moderation.model.enums.VideoModerationStatus.APPROVED
+                        AND sv.video.musicCopyrightStatus <> com.back.moderation.model.enums.MusicCopyrightStatus.REJECTED
+                    )
+              )
               AND NOT EXISTS (
                     SELECT b.id FROM UserBlock b
                     WHERE (b.blocker.id = :userId AND b.blocked = sv.video.user)

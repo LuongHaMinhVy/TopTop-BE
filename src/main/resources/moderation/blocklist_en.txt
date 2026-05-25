@@ -1,0 +1,53 @@
+# Blocked keyword list - English
+# Lines starting with # are comments and will be ignored
+# Add one keyword per line, lowercase
+
+# Spam / Scam / Gambling
+click the link now
+make money fast
+get rich quick
+guaranteed profit
+pyramid scheme
+online casino
+free giveaway
+win real money
+earn passive income
+
+# Self-harm
+how to hurt yourself
+how to kill yourself
+overdose instructions
+suicide method
+
+# Hate speech / Harassment / Vulgarity
+go kill yourself
+fuck you
+fucking
+bitch
+asshole
+bastard
+cunt
+dick head
+motherfucker
+piece of shit
+dumbass
+retard
+
+# Sensitive / NSFW / 18+
+pornography
+nsfw
+porn video
+xxx video
+sex clip
+naked photos
+webcam show
+child porn
+rape video
+pedophilia
+erotic show
+adult content
+
+fuck
+shit
+asshole
+bullshit

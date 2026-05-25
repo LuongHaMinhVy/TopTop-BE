@@ -12,4 +12,6 @@ public interface IMessageAttachmentRepository extends JpaRepository<MessageAttac
     Optional<MessageAttachment> findByMessage(Message message);
 
     long countByTypeAndVideoId(String type, Long videoId);
+
+    void deleteByVideoId(Long videoId);
 }

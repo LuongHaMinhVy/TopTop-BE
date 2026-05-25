@@ -12,6 +12,7 @@ import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
 import com.back.common.model.dto.response.Meta;
+import com.back.common.utils.redis.RateLimit;
 import java.time.LocalDateTime;
 import java.util.List;
 
@@ -23,6 +24,7 @@ public class FollowController {
     private final IFollowService followService;
 
     @PostMapping("/{username}")
+    @RateLimit(limit = 30, durationInSeconds = 60)
     public ResponseEntity<ApiResponse<Void>> follow(@PathVariable String username) {
         followService.followUser(username);
         return ResponseEntity.ok(ApiResponse.<Void>builder()
@@ -33,6 +35,7 @@ public class FollowController {
     }
 
     @DeleteMapping("/{username}")
+    @RateLimit(limit = 30, durationInSeconds = 60)
     public ResponseEntity<ApiResponse<Void>> unfollow(@PathVariable String username) {
         followService.unfollowUser(username);
         return ResponseEntity.ok(ApiResponse.<Void>builder()

@@ -70,6 +70,8 @@ public enum ErrorCode {
     VIDEO_NOT_FOUND(HttpStatus.NOT_FOUND, "Video not found"),
     SOUND_NOT_FOUND(HttpStatus.NOT_FOUND, "Sound not found"),
     COMMENT_NOT_FOUND(HttpStatus.NOT_FOUND, "Comment not found"),
+    COMMENT_REJECTED_BY_MODERATION(HttpStatus.BAD_REQUEST, "Comment rejected by moderation"),
+    MESSAGE_REJECTED_BY_MODERATION(HttpStatus.BAD_REQUEST, "Message rejected by moderation"),
     COLLECTION_NOT_FOUND(HttpStatus.NOT_FOUND, "Collection not found"),
     COLLECTION_ALREADY_EXISTS(HttpStatus.CONFLICT, "Collection already exists"),
     COLLECTION_ACCESS_DENIED(HttpStatus.FORBIDDEN, "You do not have permission to access this collection"),

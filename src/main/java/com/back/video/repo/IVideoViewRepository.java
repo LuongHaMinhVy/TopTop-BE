@@ -10,4 +10,6 @@ import java.util.List;
 @Repository
 public interface IVideoViewRepository extends JpaRepository<VideoView, Long> {
     List<VideoView> findByOwnerIdAndCreatedAtBetween(Long ownerId, LocalDateTime start, LocalDateTime end);
+
+    void deleteByVideoId(Long videoId);
 }

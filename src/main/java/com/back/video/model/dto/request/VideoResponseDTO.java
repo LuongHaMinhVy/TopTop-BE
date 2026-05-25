@@ -42,4 +42,12 @@ public class VideoResponseDTO {
     private Boolean deleted;
     private Boolean unavailable;
     private SoundResponseDTO sound;
+    private String moderationStatus;
+    private LocalDateTime moderationCheckedAt;
+    private String moderationReasonCode;
+    private String moderationReasonMessage;
+    private String musicCopyrightStatus;
+    private LocalDateTime musicCopyrightCheckedAt;
+    private String musicCopyrightReasonCode;
+    private String musicCopyrightReasonMessage;
 }

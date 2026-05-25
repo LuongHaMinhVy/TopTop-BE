@@ -1,6 +1,7 @@
 package com.back.video.repo;
 
 import com.back.video.model.entity.Video;
+import com.back.moderation.model.enums.VideoModerationStatus;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.stereotype.Repository;
@@ -59,6 +60,8 @@ public interface IVideoRepository extends JpaRepository<Video, Long> {
                     )
                 )
               )
+              AND v.moderationStatus = com.back.moderation.model.enums.VideoModerationStatus.APPROVED
+              AND v.musicCopyrightStatus <> com.back.moderation.model.enums.MusicCopyrightStatus.REJECTED
             """)
     Page<Video> findAllVisibleForViewer(@Param("viewerId") Long viewerId, Pageable pageable);
 
@@ -74,6 +77,8 @@ public interface IVideoRepository extends JpaRepository<Video, Long> {
               AND (
                 (
                     v.visibility = com.back.video.model.enums.VideoVisibility.PUBLIC
+                    AND v.moderationStatus = com.back.moderation.model.enums.VideoModerationStatus.APPROVED
+                    AND v.musicCopyrightStatus <> com.back.moderation.model.enums.MusicCopyrightStatus.REJECTED
                     AND (
                         :viewerId IS NULL
                         OR v.user.id = :viewerId
@@ -91,6 +96,8 @@ public interface IVideoRepository extends JpaRepository<Video, Long> {
                 OR (
                     :viewerId IS NOT NULL
                     AND v.visibility = com.back.video.model.enums.VideoVisibility.FRIENDS
+                    AND v.moderationStatus = com.back.moderation.model.enums.VideoModerationStatus.APPROVED
+                    AND v.musicCopyrightStatus <> com.back.moderation.model.enums.MusicCopyrightStatus.REJECTED
                     AND NOT EXISTS (
                         SELECT b.id FROM UserBlock b
                         WHERE (b.blocker.id = :viewerId AND b.blocked = v.user)
@@ -135,6 +142,8 @@ public interface IVideoRepository extends JpaRepository<Video, Long> {
                   WHERE (b.blocker.id = :viewerId AND b.blocked = v.user)
                      OR (b.blocked.id = :viewerId AND b.blocker = v.user)
               )
+              AND v.moderationStatus = com.back.moderation.model.enums.VideoModerationStatus.APPROVED
+              AND v.musicCopyrightStatus <> com.back.moderation.model.enums.MusicCopyrightStatus.REJECTED
             ORDER BY v.createdAt DESC
             """)
     Page<Video> findFollowingFeed(@Param("viewerId") Long viewerId, Pageable pageable);
@@ -160,6 +169,8 @@ public interface IVideoRepository extends JpaRepository<Video, Long> {
                   WHERE (b.blocker.id = :viewerId AND b.blocked = v.user)
                      OR (b.blocked.id = :viewerId AND b.blocker = v.user)
               )
+              AND v.moderationStatus = com.back.moderation.model.enums.VideoModerationStatus.APPROVED
+              AND v.musicCopyrightStatus <> com.back.moderation.model.enums.MusicCopyrightStatus.REJECTED
             ORDER BY v.createdAt DESC
             """)
     Page<Video> findFriendsFeed(@Param("viewerId") Long viewerId, Pageable pageable);
@@ -176,6 +187,13 @@ public interface IVideoRepository extends JpaRepository<Video, Long> {
                         SELECT b.id FROM UserBlock b
                         WHERE (b.blocker.id = :userId AND b.blocked = v.user)
                            OR (b.blocked.id = :userId AND b.blocker = v.user)
+                    )
+              )
+              AND (
+                    v.user.id = :userId
+                    OR (
+                        v.moderationStatus = com.back.moderation.model.enums.VideoModerationStatus.APPROVED
+                        AND v.musicCopyrightStatus <> com.back.moderation.model.enums.MusicCopyrightStatus.REJECTED
                     )
               )
             ORDER BY vl.id DESC
@@ -202,7 +220,9 @@ public interface IVideoRepository extends JpaRepository<Video, Long> {
                  OR LOWER(v.user.username) LIKE LOWER(CONCAT('%', :keyword, '%'))
                  OR LOWER(v.user.nickname) LIKE LOWER(CONCAT('%', :keyword, '%'))
               )
-            ORDER BY v.likeCount DESC, v.viewCount DESC, v.createdAt DESC
+              AND v.moderationStatus = com.back.moderation.model.enums.VideoModerationStatus.APPROVED
+              AND v.musicCopyrightStatus <> com.back.moderation.model.enums.MusicCopyrightStatus.REJECTED
+             ORDER BY v.likeCount DESC, v.viewCount DESC, v.createdAt DESC
             """)
     Page<Video> searchPublicVideos(@Param("keyword") String keyword, Pageable pageable);
 
@@ -212,6 +232,8 @@ public interface IVideoRepository extends JpaRepository<Video, Long> {
             WHERE v.deletedAt IS NULL
               AND v.sound.id = :soundId
               AND v.visibility = com.back.video.model.enums.VideoVisibility.PUBLIC
+              AND v.moderationStatus = com.back.moderation.model.enums.VideoModerationStatus.APPROVED
+              AND v.musicCopyrightStatus <> com.back.moderation.model.enums.MusicCopyrightStatus.REJECTED
             ORDER BY v.createdAt DESC
             """)
     Page<Video> findPublicVideosBySoundId(@Param("soundId") Long soundId, Pageable pageable);

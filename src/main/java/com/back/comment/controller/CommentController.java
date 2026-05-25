@@ -6,6 +6,7 @@ import com.back.comment.model.dto.response.CommentResponseDTO;
 import com.back.comment.service.ICommentService;
 import com.back.common.model.dto.response.ApiResponse;
 import com.back.common.utils.Translator;
+import com.back.common.utils.redis.RateLimit;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.HttpStatus;
@@ -26,6 +27,7 @@ public class CommentController {
     private final ICommentService commentService;
 
     @PostMapping("/video/{videoId}")
+    @RateLimit(limit = 20, durationInSeconds = 60)
     public ResponseEntity<ApiResponse<CommentResponseDTO>> addComment(
             @PathVariable Long videoId,
             @Valid @RequestBody CommentRequestDTO requestDTO) {
@@ -73,6 +75,7 @@ public class CommentController {
     }
 
     @PostMapping("/{id}/replies")
+    @RateLimit(limit = 20, durationInSeconds = 60)
     public ResponseEntity<ApiResponse<CommentResponseDTO>> addReply(
             @PathVariable Long id,
             @Valid @RequestBody CommentRequestDTO requestDTO) {
@@ -96,6 +99,7 @@ public class CommentController {
     }
 
     @PostMapping("/{id}/like")
+    @RateLimit(limit = 30, durationInSeconds = 60)
     public ResponseEntity<ApiResponse<CommentLikeResponseDTO>> likeComment(@PathVariable Long id) {
         CommentLikeResponseDTO data = commentService.likeComment(id);
         return ResponseEntity.ok(ApiResponse.<CommentLikeResponseDTO>builder()

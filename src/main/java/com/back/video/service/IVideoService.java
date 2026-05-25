@@ -11,7 +11,13 @@ import org.springframework.web.multipart.MultipartFile;
 import java.io.IOException;
 import java.util.List;
 
+import com.back.video.model.dto.request.InitVideoUploadRequestDTO;
+import com.back.video.model.dto.request.CompleteVideoUploadRequestDTO;
+import com.back.video.model.dto.response.InitVideoUploadResponseDTO;
+
 public interface IVideoService {
+    InitVideoUploadResponseDTO initVideoUpload(InitVideoUploadRequestDTO requestDTO);
+    VideoResponseDTO completeVideoUpload(CompleteVideoUploadRequestDTO requestDTO, MultipartFile cover);
     VideoResponseDTO uploadVideo(MultipartFile file, MultipartFile cover, VideoUploadRequestDTO requestDTO) throws IOException;
     VideoResponseDTO getVideoById(Long id);
     Page<VideoResponseDTO> getAllVideos(Pageable pageable);

@@ -9,4 +9,5 @@ import org.springframework.security.core.Authentication;
 public interface IChatMessageService {
     MessageResponseDTO sendMessage(Authentication authentication, SendMessageRequestDTO request);
     Page<MessageResponseDTO> getMessages(Authentication authentication, Long conversationId, Pageable pageable);
+    void deleteMessage(Authentication authentication, Long messageId);
 }

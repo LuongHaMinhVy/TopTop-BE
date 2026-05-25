@@ -9,6 +9,8 @@ import com.back.block.service.IUserBlockService;
 import com.back.common.service.R2StorageService;
 import com.back.common.utils.exception.AppException;
 import com.back.common.utils.exception.ErrorCode;
+import com.back.moderation.model.enums.MusicCopyrightStatus;
+import com.back.moderation.model.enums.VideoModerationStatus;
 import com.back.sound.mapper.SoundMapper;
 import com.back.sound.model.entity.Sound;
 import com.back.sound.model.enums.SoundType;
@@ -60,6 +62,13 @@ import java.util.UUID;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
+import org.springframework.data.redis.core.RedisTemplate;
+import com.back.video.model.dto.request.InitVideoUploadRequestDTO;
+import com.back.video.model.dto.request.CompleteVideoUploadRequestDTO;
+import com.back.video.model.dto.response.InitVideoUploadResponseDTO;
+
+import com.back.moderation.service.IVideoModerationService;
+
 @Slf4j
 @Service
 @RequiredArgsConstructor
@@ -80,6 +89,117 @@ public class VideoServiceImpl implements IVideoService {
     private final IAudioProcessingService audioProcessingService;
     private final IMessageAttachmentRepository messageAttachmentRepository;
     private final IVideoViewRepository videoViewRepository;
+    private final RedisTemplate<String, Object> redisTemplate;
+    private final VideoDeletionService videoDeletionService;
+    private IVideoModerationService videoModerationService;
+
+    @org.springframework.context.annotation.Lazy
+    @org.springframework.beans.factory.annotation.Autowired
+    public void setVideoModerationService(IVideoModerationService videoModerationService) {
+        this.videoModerationService = videoModerationService;
+    }
+
+    @Override
+    public InitVideoUploadResponseDTO initVideoUpload(InitVideoUploadRequestDTO requestDTO) {
+        User user = getCurrentUser();
+        if (user == null) {
+            throw new AppException(ErrorCode.UNAUTHORIZED);
+        }
+
+        if (!requestDTO.getContentType().startsWith("video/")) {
+            throw new AppException(ErrorCode.INVALID_VIDEO_FILE_TYPE);
+        }
+
+        String extension = getFileExtension(requestDTO.getFileName());
+        String uploadId = UUID.randomUUID().toString();
+        String objectKey = "video-storage/" + uploadId + extension;
+        String uploadUrl = storageService.generatePresignedUploadUrl(objectKey, requestDTO.getContentType(), java.time.Duration.ofMinutes(30));
+
+        redisTemplate.opsForValue().set("upload:" + uploadId, objectKey, 30, java.util.concurrent.TimeUnit.MINUTES);
+
+        return InitVideoUploadResponseDTO.builder()
+                .uploadId(uploadId)
+                .uploadUrl(uploadUrl)
+                .objectKey(objectKey)
+                .method("PUT")
+                .build();
+    }
+
+    @Override
+    public VideoResponseDTO completeVideoUpload(CompleteVideoUploadRequestDTO requestDTO, MultipartFile cover) {
+        User user = getCurrentUser();
+        if (user == null) {
+            throw new AppException(ErrorCode.UNAUTHORIZED);
+        }
+
+        if (requestDTO.getTitle() == null || requestDTO.getTitle().trim().isEmpty()) {
+            throw new AppException(ErrorCode.BAD_REQUEST);
+        }
+
+        String objectKey = (String) redisTemplate.opsForValue().get("upload:" + requestDTO.getUploadId());
+        if (objectKey == null) {
+            throw new AppException(ErrorCode.BAD_REQUEST);
+        }
+
+        String fileUrl = storageService.buildPublicUrl(objectKey);
+
+        String coverUrl = null;
+        if (cover != null && !cover.isEmpty()) {
+            String coverExtension = getFileExtension(cover.getOriginalFilename());
+            String coverKey = "video-storage/covers/" + UUID.randomUUID() + coverExtension;
+            try {
+                coverUrl = storageService.uploadFile(cover, coverKey);
+            } catch (IOException e) {
+                log.warn("Cover upload failed", e);
+            }
+        }
+
+        Integer duration = 0; // Duration extraction requires file, deferred to processing worker if any
+
+        Set<Hashtag> extractedHashtags = new HashSet<>();
+        if (requestDTO.getDescription() != null) {
+            Matcher matcher = Pattern.compile("#(\\w+)").matcher(requestDTO.getDescription());
+            while (matcher.find()) {
+                String hashtagName = matcher.group(1).toLowerCase();
+                Hashtag hashtag = hashtagRepo.findByName(hashtagName)
+                        .orElseGet(() -> hashtagRepo.save(Hashtag.builder().name(hashtagName).postCount(0L).build()));
+                hashtag.setPostCount(hashtag.getPostCount() + 1);
+                hashtagRepo.save(hashtag);
+                extractedHashtags.add(hashtag);
+            }
+        }
+
+        Sound selectedSound = resolveSelectedSound(requestDTO.getSoundId());
+
+        Video video = Video.builder()
+                .title(requestDTO.getTitle())
+                .description(requestDTO.getDescription())
+                .category(requestDTO.getCategory())
+                .fileUrl(fileUrl)
+                .thumbnailUrl(coverUrl)
+                .duration(duration)
+                .user(user)
+                .hashtags(extractedHashtags)
+                .visibility(requestDTO.getVisibility() != null ? VideoVisibility.valueOf(requestDTO.getVisibility()) : VideoVisibility.PUBLIC)
+                .allowComments(requestDTO.getAllowComments() != null ? requestDTO.getAllowComments() : true)
+                .allowEdit(requestDTO.getAllowEdit() != null ? requestDTO.getAllowEdit() : false)
+                .sound(selectedSound)
+                .build();
+
+        video = videoRepository.save(video);
+
+        if (selectedSound != null) {
+            soundRepository.incrementUsageCount(selectedSound.getId());
+        }
+
+        redisTemplate.delete("upload:" + requestDTO.getUploadId());
+
+        // Trigger async moderation
+        final Long videoId = video.getId();
+        videoModerationService.runModeration(videoId);
+
+        return mapToResponseDTO(video);
+    }
 
     @Override
     public VideoResponseDTO uploadVideo(MultipartFile file, MultipartFile cover, VideoUploadRequestDTO requestDTO) throws IOException {
@@ -419,12 +539,7 @@ public class VideoServiceImpl implements IVideoService {
 
         for (Video video : expired) {
             try {
-                String key = storageService.extractKeyFromUrl(video.getFileUrl());
-                storageService.deleteFile(key);
-                ICollectionVideoRepository.deleteByVideoId(video.getId());
-                ISavedVideoRepository.deleteByVideoId(video.getId());
-                videoRepostRepository.deleteByVideoId(video.getId());
-                videoRepository.delete(video);
+                videoDeletionService.hardDelete(video);
                 log.info("Hard deleted video id={}", video.getId());
             } catch (Exception e) {
                 log.error("Failed to hard delete video id={}: {}", video.getId(), e.getMessage());
@@ -558,6 +673,14 @@ public class VideoServiceImpl implements IVideoService {
                     .deleted(true)
                     .unavailable(true)
                     .sound(soundMapper.toResponseDTO(video.getSound()))
+                    .moderationStatus(video.getModerationStatus() != null ? video.getModerationStatus().name() : null)
+                    .moderationCheckedAt(video.getModerationCheckedAt())
+                    .moderationReasonCode(video.getModerationReasonCode())
+                    .moderationReasonMessage(video.getModerationReasonMessage())
+                    .musicCopyrightStatus(video.getMusicCopyrightStatus() != null ? video.getMusicCopyrightStatus().name() : null)
+                    .musicCopyrightCheckedAt(video.getMusicCopyrightCheckedAt())
+                    .musicCopyrightReasonCode(video.getMusicCopyrightReasonCode())
+                    .musicCopyrightReasonMessage(video.getMusicCopyrightReasonMessage())
                     .build();
         }
         boolean isSaved = currentUser != null && ISavedVideoRepository.existsByUserIdAndVideoId(currentUser.getId(), video.getId());
@@ -596,6 +719,14 @@ public class VideoServiceImpl implements IVideoService {
                 .deleted(false)
                 .unavailable(false)
                 .sound(soundMapper.toResponseDTO(video.getSound()))
+                .moderationStatus(video.getModerationStatus() != null ? video.getModerationStatus().name() : null)
+                .moderationCheckedAt(video.getModerationCheckedAt())
+                .moderationReasonCode(video.getModerationReasonCode())
+                .moderationReasonMessage(video.getModerationReasonMessage())
+                .musicCopyrightStatus(video.getMusicCopyrightStatus() != null ? video.getMusicCopyrightStatus().name() : null)
+                .musicCopyrightCheckedAt(video.getMusicCopyrightCheckedAt())
+                .musicCopyrightReasonCode(video.getMusicCopyrightReasonCode())
+                .musicCopyrightReasonMessage(video.getMusicCopyrightReasonMessage())
                 .build();
     }
 
@@ -722,16 +853,20 @@ public class VideoServiceImpl implements IVideoService {
     }
 
     private void checkVisibilityOrThrow(Video video, User viewer) {
+        if (viewer != null && video.getUser().getId().equals(viewer.getId())) {
+            return;
+        }
+
+        if (!isPublishedAfterModeration(video)) {
+            throw new AppException(ErrorCode.FILE_NOT_FOUND);
+        }
+
         if (video.getVisibility() == null || video.getVisibility() == VideoVisibility.PUBLIC) {
             return;
         }
 
         if (viewer == null) {
             throw new AppException(ErrorCode.UNAUTHORIZED);
-        }
-
-        if (video.getUser().getId().equals(viewer.getId())) {
-            return;
         }
 
         if (video.getVisibility() == VideoVisibility.PRIVATE) {
@@ -745,6 +880,11 @@ public class VideoServiceImpl implements IVideoService {
                 throw new AppException(ErrorCode.USER_BLOCKED);
             }
         }
+    }
+
+    private boolean isPublishedAfterModeration(Video video) {
+        return video.getModerationStatus() == VideoModerationStatus.APPROVED
+                && video.getMusicCopyrightStatus() != MusicCopyrightStatus.REJECTED;
     }
 
     @Override

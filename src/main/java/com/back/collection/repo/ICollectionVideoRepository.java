@@ -31,6 +31,14 @@ public interface ICollectionVideoRepository extends JpaRepository<CollectionVide
             SELECT cv FROM CollectionVideo cv
             WHERE cv.collection.id = :collectionId
               AND cv.collection.user.id = :userId
+              AND cv.video.deletedAt IS NULL
+              AND (
+                    cv.video.user.id = :userId
+                    OR (
+                        cv.video.moderationStatus = com.back.moderation.model.enums.VideoModerationStatus.APPROVED
+                        AND cv.video.musicCopyrightStatus <> com.back.moderation.model.enums.MusicCopyrightStatus.REJECTED
+                    )
+              )
               AND NOT EXISTS (
                     SELECT b.id FROM UserBlock b
                     WHERE (b.blocker.id = :userId AND b.blocked = cv.video.user)
@@ -48,6 +56,15 @@ public interface ICollectionVideoRepository extends JpaRepository<CollectionVide
             SELECT cv FROM CollectionVideo cv
             WHERE cv.collection.id = :collectionId
               AND cv.collection.user.id = :ownerId
+              AND cv.video.deletedAt IS NULL
+              AND (
+                    :viewerId IS NOT NULL
+                    AND cv.video.user.id = :viewerId
+                    OR (
+                        cv.video.moderationStatus = com.back.moderation.model.enums.VideoModerationStatus.APPROVED
+                        AND cv.video.musicCopyrightStatus <> com.back.moderation.model.enums.MusicCopyrightStatus.REJECTED
+                    )
+              )
               AND (
                     :viewerId IS NULL
                     OR cv.video.user.id = :viewerId
@@ -73,6 +90,8 @@ public interface ICollectionVideoRepository extends JpaRepository<CollectionVide
             SELECT cv FROM CollectionVideo cv
             WHERE cv.collection.id = :collectionId
               AND cv.video.deletedAt IS NULL
+              AND cv.video.moderationStatus = com.back.moderation.model.enums.VideoModerationStatus.APPROVED
+              AND cv.video.musicCopyrightStatus <> com.back.moderation.model.enums.MusicCopyrightStatus.REJECTED
             ORDER BY cv.addedAt DESC
             """)
     Optional<CollectionVideo> findFirstAvailableByCollectionIdOrderByAddedAtDesc(@Param("collectionId") Long collectionId, Limit limit);

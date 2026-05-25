@@ -6,6 +6,7 @@ import com.back.comment.service.ICommentService;
 import com.back.common.model.dto.response.ApiResponse;
 import com.back.common.model.dto.response.Meta;
 import com.back.common.utils.Translator;
+import com.back.common.utils.redis.RateLimit;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.Page;
@@ -43,6 +44,7 @@ public class VideoCommentController {
     }
 
     @PostMapping("/{videoId}/comments")
+    @RateLimit(limit = 20, durationInSeconds = 60)
     public ResponseEntity<ApiResponse<CommentResponseDTO>> addComment(
             @PathVariable Long videoId,
             @Valid @RequestBody CommentRequestDTO requestDTO) {

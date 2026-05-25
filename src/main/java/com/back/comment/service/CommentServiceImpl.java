@@ -10,6 +10,7 @@ import com.back.comment.model.entity.Comment;
 import com.back.comment.repo.ICommentLikeRepo;
 import com.back.comment.repo.ICommentRepo;
 import com.back.block.service.IUserBlockService;
+import com.back.moderation.service.ITextContentModerationService;
 import com.back.notification.service.INotificationService;
 import com.back.user.model.entity.User;
 import com.back.user.model.enums.RoleName;
@@ -36,6 +37,7 @@ public class CommentServiceImpl implements ICommentService {
     private final INotificationService notificationService;
     private final IUserRepo userRepo;
     private final IUserBlockService userBlockService;
+    private final ITextContentModerationService textContentModerationService;
 
     @Override
     @Transactional
@@ -45,11 +47,13 @@ public class CommentServiceImpl implements ICommentService {
                 .orElseThrow(() -> new AppException(ErrorCode.VIDEO_NOT_FOUND));
         userBlockService.assertNotBlockedEitherWay(user, video.getUser());
         validateCommentAllowed(video);
+        String content = normalizeContent(requestDTO.getContent());
+        textContentModerationService.assertAllowed("COMMENT", content, user.getId(), "content");
 
         Comment.CommentBuilder builder = Comment.builder()
                 .user(user)
                 .video(video)
-                .content(normalizeContent(requestDTO.getContent()))
+                .content(content)
                 .mediaUrl(normalizeMediaUrl(requestDTO.getMediaUrl()))
                 .mediaType(normalizeMediaType(requestDTO.getMediaType()))
                 .timestampInVideo(requestDTO.getTimestampInVideo())

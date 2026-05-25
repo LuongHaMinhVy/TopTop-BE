@@ -15,6 +15,7 @@ import com.back.chat.repo.IMessageRepository;
 import com.back.chat.repo.IConversationParticipantRepository;
 import com.back.common.utils.exception.AppException;
 import com.back.common.utils.exception.ErrorCode;
+import com.back.moderation.service.ITextContentModerationService;
 import com.back.user.model.entity.User;
 import com.back.user.repo.IUserRepo;
 import com.back.video.model.entity.Video;
@@ -40,6 +41,7 @@ public class ChatMessageServiceImpl implements IChatMessageService {
     private final IUserRepo userRepo;
     private final IVideoRepository videoRepository;
     private final IChatRealtimeService realtimeService;
+    private final ITextContentModerationService textContentModerationService;
 
     @Override
     @Transactional
@@ -57,6 +59,8 @@ public class ChatMessageServiceImpl implements IChatMessageService {
                 && (request.getMediaUrl() == null || request.getMediaUrl().isBlank())) {
             throw new AppException(ErrorCode.BAD_REQUEST);
         }
+        String body = normalizeBody(request.getBody());
+        textContentModerationService.assertAllowed("MESSAGE", body, currentUser.getId(), "body");
 
         IMessageRepository.findBySenderIdAndClientMessageId(currentUser.getId(), request.getClientMessageId())
                 .ifPresent(m -> { throw new AppException(ErrorCode.BAD_REQUEST); });
@@ -65,7 +69,7 @@ public class ChatMessageServiceImpl implements IChatMessageService {
                 .conversation(conversation)
                 .sender(currentUser)
                 .type(request.getType())
-                .body(request.getBody())
+                .body(body)
                 .status(MessageStatus.SENT)
                 .clientMessageId(request.getClientMessageId())
                 .replyToMessageId(request.getReplyToMessageId())
@@ -109,15 +113,15 @@ public class ChatMessageServiceImpl implements IChatMessageService {
         conversation.setLastMessageId(message.getId());
         conversation.setLastMessageAt(LocalDateTime.now());
         String preview = switch (request.getType()) {
-            case TEXT -> request.getBody();
-            case VIDEO_SHARE -> request.getBody() != null && !request.getBody().isBlank()
-                    ? request.getBody()
+            case TEXT -> body;
+            case VIDEO_SHARE -> body != null && !body.isBlank()
+                    ? body
                     : "Đã chia sẻ một video";
-            case IMAGE -> request.getBody() != null && !request.getBody().isBlank()
-                    ? request.getBody()
+            case IMAGE -> body != null && !body.isBlank()
+                    ? body
                     : "Đã gửi một ảnh";
-            case VIDEO -> request.getBody() != null && !request.getBody().isBlank()
-                    ? request.getBody()
+            case VIDEO -> body != null && !body.isBlank()
+                    ? body
                     : "Đã gửi một video";
             default -> "Sent an attachment";
         };
@@ -148,12 +152,34 @@ public class ChatMessageServiceImpl implements IChatMessageService {
         participantRepository.findByConversationAndUser(conversation, currentUser)
                 .orElseThrow(() -> new AppException(ErrorCode.CHAT_ACCESS_DENIED));
 
-        Page<Message> messages = IMessageRepository.findByConversationOrderByCreatedAtDesc(conversation, pageable);
+        Page<Message> messages = IMessageRepository.findVisibleByConversationForUser(
+                conversation,
+                hiddenToken(currentUser.getId()),
+                pageable
+        );
 
         return messages.map(m -> {
             MessageAttachment attachment = attachmentRepository.findByMessage(m).orElse(null);
             return MessageMapper.toResponse(m, attachment, currentUser.getId());
         });
+    }
+
+    @Override
+    @Transactional
+    public void deleteMessage(Authentication authentication, Long messageId) {
+        User currentUser = getCurrentUser(authentication);
+        Message message = IMessageRepository.findById(messageId)
+                .orElseThrow(() -> new AppException(ErrorCode.FILE_NOT_FOUND));
+
+        participantRepository.findByConversationAndUser(message.getConversation(), currentUser)
+                .orElseThrow(() -> new AppException(ErrorCode.CHAT_ACCESS_DENIED));
+
+        if (!message.getSender().getId().equals(currentUser.getId())) {
+            throw new AppException(ErrorCode.CHAT_ACCESS_DENIED);
+        }
+
+        message.setHiddenForUserIds(addHiddenUser(message.getHiddenForUserIds(), currentUser.getId()));
+        IMessageRepository.save(message);
     }
 
     private User getCurrentUser(Authentication authentication) {
@@ -179,5 +205,28 @@ public class ChatMessageServiceImpl implements IChatMessageService {
                 .replace("\"", "\\\"")
                 .replace("\n", "\\n")
                 .replace("\r", "\\r");
+    }
+
+    private String normalizeBody(String body) {
+        String normalized = body == null ? "" : body.trim();
+        if (normalized.length() > 4000) {
+            throw new AppException(ErrorCode.BAD_REQUEST);
+        }
+        return normalized.isBlank() ? null : normalized;
+    }
+
+    private String hiddenToken(Long userId) {
+        return "%," + userId + ",%";
+    }
+
+    private String addHiddenUser(String hiddenForUserIds, Long userId) {
+        String token = "," + userId + ",";
+        if (hiddenForUserIds != null && hiddenForUserIds.contains(token)) {
+            return hiddenForUserIds;
+        }
+        if (hiddenForUserIds == null || hiddenForUserIds.isBlank()) {
+            return token;
+        }
+        return hiddenForUserIds + userId + ",";
     }
 }
