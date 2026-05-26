@@ -54,6 +54,10 @@ public class VideoModerationResult extends BaseEntity {
     @Column(name = "categories_json", columnDefinition = "TEXT")
     private String categoriesJson;
 
+    /** Aggregated quality issues across all frames: WATERMARK, QR_CODE, LOW_QUALITY */
+    @Column(name = "quality_issues_json", columnDefinition = "TEXT")
+    private String qualityIssuesJson;
+
     @Column(name = "raw_result_json", columnDefinition = "TEXT")
     private String rawResultJson;
 

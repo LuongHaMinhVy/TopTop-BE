@@ -50,4 +50,6 @@ public class VideoResponseDTO {
     private LocalDateTime musicCopyrightCheckedAt;
     private String musicCopyrightReasonCode;
     private String musicCopyrightReasonMessage;
+    private String qualityIssuesJson;
+    private String qualityIssueMessage;
 }

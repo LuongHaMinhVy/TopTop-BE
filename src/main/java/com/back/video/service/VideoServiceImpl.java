@@ -11,6 +11,7 @@ import com.back.common.utils.exception.AppException;
 import com.back.common.utils.exception.ErrorCode;
 import com.back.moderation.model.enums.MusicCopyrightStatus;
 import com.back.moderation.model.enums.VideoModerationStatus;
+import com.back.recommendation.service.IVideoRecommendationService;
 import com.back.sound.mapper.SoundMapper;
 import com.back.sound.model.entity.Sound;
 import com.back.sound.model.enums.SoundType;
@@ -67,6 +68,7 @@ import com.back.video.model.dto.request.InitVideoUploadRequestDTO;
 import com.back.video.model.dto.request.CompleteVideoUploadRequestDTO;
 import com.back.video.model.dto.response.InitVideoUploadResponseDTO;
 
+import com.back.moderation.service.ITextContentModerationService;
 import com.back.moderation.service.IVideoModerationService;
 
 @Slf4j
@@ -91,13 +93,9 @@ public class VideoServiceImpl implements IVideoService {
     private final IVideoViewRepository videoViewRepository;
     private final RedisTemplate<String, Object> redisTemplate;
     private final VideoDeletionService videoDeletionService;
-    private IVideoModerationService videoModerationService;
-
-    @org.springframework.context.annotation.Lazy
-    @org.springframework.beans.factory.annotation.Autowired
-    public void setVideoModerationService(IVideoModerationService videoModerationService) {
-        this.videoModerationService = videoModerationService;
-    }
+    private final ITextContentModerationService textContentModerationService;
+    private final IVideoRecommendationService videoRecommendationService;
+    private final IVideoModerationService videoModerationService;
 
     @Override
     public InitVideoUploadResponseDTO initVideoUpload(InitVideoUploadRequestDTO requestDTO) {
@@ -136,6 +134,16 @@ public class VideoServiceImpl implements IVideoService {
             throw new AppException(ErrorCode.BAD_REQUEST);
         }
 
+        boolean contentModerationCheckEnabled = !Boolean.FALSE.equals(requestDTO.getEnableContentModerationCheck());
+        boolean musicCopyrightCheckEnabled = !Boolean.FALSE.equals(requestDTO.getEnableMusicCopyrightCheck());
+
+        if (contentModerationCheckEnabled) {
+            textContentModerationService.assertAllowed("VIDEO_TEXT", requestDTO.getTitle(), user.getId(), "title");
+            if (requestDTO.getDescription() != null) {
+                textContentModerationService.assertAllowed("VIDEO_TEXT", requestDTO.getDescription(), user.getId(), "description");
+            }
+        }
+
         String objectKey = (String) redisTemplate.opsForValue().get("upload:" + requestDTO.getUploadId());
         if (objectKey == null) {
             throw new AppException(ErrorCode.BAD_REQUEST);
@@ -171,6 +179,17 @@ public class VideoServiceImpl implements IVideoService {
 
         Sound selectedSound = resolveSelectedSound(requestDTO.getSoundId());
 
+        // Serialize edit instructions to JSON for persistence
+        String editInstructionsJson = null;
+        if (requestDTO.getEditInstructions() != null) {
+            try {
+                com.fasterxml.jackson.databind.ObjectMapper objectMapper = new com.fasterxml.jackson.databind.ObjectMapper();
+                editInstructionsJson = objectMapper.writeValueAsString(requestDTO.getEditInstructions());
+            } catch (com.fasterxml.jackson.core.JsonProcessingException e) {
+                log.warn("Failed to serialize edit instructions", e);
+            }
+        }
+
         Video video = Video.builder()
                 .title(requestDTO.getTitle())
                 .description(requestDTO.getDescription())
@@ -184,6 +203,7 @@ public class VideoServiceImpl implements IVideoService {
                 .allowComments(requestDTO.getAllowComments() != null ? requestDTO.getAllowComments() : true)
                 .allowEdit(requestDTO.getAllowEdit() != null ? requestDTO.getAllowEdit() : false)
                 .sound(selectedSound)
+                .editInstructionsJson(editInstructionsJson)
                 .build();
 
         video = videoRepository.save(video);
@@ -196,7 +216,7 @@ public class VideoServiceImpl implements IVideoService {
 
         // Trigger async moderation
         final Long videoId = video.getId();
-        videoModerationService.runModeration(videoId);
+        videoModerationService.runModeration(videoId, musicCopyrightCheckEnabled, contentModerationCheckEnabled);
 
         return mapToResponseDTO(video);
     }
@@ -210,6 +230,16 @@ public class VideoServiceImpl implements IVideoService {
 
         if (requestDTO.getTitle() == null || requestDTO.getTitle().trim().isEmpty()) {
             throw new AppException(ErrorCode.BAD_REQUEST);
+        }
+
+        boolean contentModerationCheckEnabled = !Boolean.FALSE.equals(requestDTO.getEnableContentModerationCheck());
+        boolean musicCopyrightCheckEnabled = !Boolean.FALSE.equals(requestDTO.getEnableMusicCopyrightCheck());
+
+        if (contentModerationCheckEnabled) {
+            textContentModerationService.assertAllowed("VIDEO_TEXT", requestDTO.getTitle(), user.getId(), "title");
+            if (requestDTO.getDescription() != null) {
+                textContentModerationService.assertAllowed("VIDEO_TEXT", requestDTO.getDescription(), user.getId(), "description");
+            }
         }
 
         validateVideo(file);
@@ -272,6 +302,8 @@ public class VideoServiceImpl implements IVideoService {
             soundRepository.incrementUsageCount(selectedSound.getId());
         }
 
+        videoModerationService.runModeration(video.getId(), musicCopyrightCheckEnabled, contentModerationCheckEnabled);
+
         return mapToResponseDTO(video);
     }
 
@@ -297,6 +329,7 @@ public class VideoServiceImpl implements IVideoService {
         List<Video> candidates = new java.util.ArrayList<>(videoRepository.findAllVisibleForViewer(viewerId, candidatePageable).getContent());
         
         candidates.sort((v1, v2) -> Double.compare(calculateForYouScore(v2, currentUser), calculateForYouScore(v1, currentUser)));
+        candidates = new java.util.ArrayList<>(videoRecommendationService.rankForYou(candidates, currentUser));
         
         return paginateList(candidates, pageable).map(this::mapToResponseDTO);
     }
@@ -427,6 +460,9 @@ public class VideoServiceImpl implements IVideoService {
                 .orElseThrow(() -> new AppException(ErrorCode.VIDEO_NOT_FOUND));
         if (video.isDeleted()) {
             throw new AppException(ErrorCode.VIDEO_NOT_FOUND);
+        }
+        if (video.getUser().getId().equals(currentUser.getId())) {
+            throw new AppException(ErrorCode.CANNOT_REPOST_SELF);
         }
         userBlockService.assertNotBlockedEitherWay(currentUser, video.getUser());
         checkVisibilityOrThrow(video, currentUser);
@@ -681,6 +717,8 @@ public class VideoServiceImpl implements IVideoService {
                     .musicCopyrightCheckedAt(video.getMusicCopyrightCheckedAt())
                     .musicCopyrightReasonCode(video.getMusicCopyrightReasonCode())
                     .musicCopyrightReasonMessage(video.getMusicCopyrightReasonMessage())
+                    .qualityIssuesJson(video.getQualityIssuesJson())
+                    .qualityIssueMessage(video.getQualityIssueMessage())
                     .build();
         }
         boolean isSaved = currentUser != null && ISavedVideoRepository.existsByUserIdAndVideoId(currentUser.getId(), video.getId());
@@ -727,6 +765,8 @@ public class VideoServiceImpl implements IVideoService {
                 .musicCopyrightCheckedAt(video.getMusicCopyrightCheckedAt())
                 .musicCopyrightReasonCode(video.getMusicCopyrightReasonCode())
                 .musicCopyrightReasonMessage(video.getMusicCopyrightReasonMessage())
+                .qualityIssuesJson(video.getQualityIssuesJson())
+                .qualityIssueMessage(video.getQualityIssueMessage())
                 .build();
     }
 
@@ -826,6 +866,31 @@ public class VideoServiceImpl implements IVideoService {
         if (requestDTO.getAllowEdit() != null) {
             video.setAllowEdit(requestDTO.getAllowEdit());
         }
+        if (requestDTO.getEditInstructions() != null) {
+            Long selectedSoundId = requestDTO.getEditInstructions().getSelectedSoundId();
+            Sound previousSound = video.getSound();
+            Sound selectedSound = selectedSoundId == null ? null : resolveSelectedSound(selectedSoundId);
+            video.setSound(selectedSound);
+            if (selectedSound != null && (previousSound == null || !previousSound.getId().equals(selectedSound.getId()))) {
+                soundRepository.incrementUsageCount(selectedSound.getId());
+            }
+        } else if (requestDTO.getSoundId() != null) {
+            Sound previousSound = video.getSound();
+            Sound selectedSound = resolveSelectedSound(requestDTO.getSoundId());
+            video.setSound(selectedSound);
+            if (selectedSound != null && (previousSound == null || !previousSound.getId().equals(selectedSound.getId()))) {
+                soundRepository.incrementUsageCount(selectedSound.getId());
+            }
+        }
+        if (requestDTO.getEditInstructions() != null) {
+            try {
+                com.fasterxml.jackson.databind.ObjectMapper objectMapper = new com.fasterxml.jackson.databind.ObjectMapper();
+                video.setEditInstructionsJson(objectMapper.writeValueAsString(requestDTO.getEditInstructions()));
+            } catch (com.fasterxml.jackson.core.JsonProcessingException e) {
+                log.warn("Failed to serialize edit instructions for video {}", id, e);
+                throw new AppException(ErrorCode.BAD_REQUEST);
+            }
+        }
 
         video = videoRepository.save(video);
         return mapToResponseDTO(video);
@@ -883,8 +948,7 @@ public class VideoServiceImpl implements IVideoService {
     }
 
     private boolean isPublishedAfterModeration(Video video) {
-        return video.getModerationStatus() == VideoModerationStatus.APPROVED
-                && video.getMusicCopyrightStatus() != MusicCopyrightStatus.REJECTED;
+        return video.getModerationStatus() == VideoModerationStatus.APPROVED;
     }
 
     @Override

@@ -25,4 +25,10 @@ public class VideoUploadRequestDTO {
     private Long soundId;
 
     private Boolean useAvatarAsSoundCover;
+
+    private Boolean enableMusicCopyrightCheck;
+
+    private Boolean enableContentModerationCheck;
+
+    private com.back.video.model.dto.request.VideoEditInstructionsRequestDTO editInstructions;
 }

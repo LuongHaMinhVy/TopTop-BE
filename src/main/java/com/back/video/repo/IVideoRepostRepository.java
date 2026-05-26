@@ -40,7 +40,6 @@ public interface IVideoRepostRepository extends JpaRepository<VideoRepost, Long>
                     AND vr.video.user.id = :viewerId
                     OR (
                         vr.video.moderationStatus = com.back.moderation.model.enums.VideoModerationStatus.APPROVED
-                        AND vr.video.musicCopyrightStatus <> com.back.moderation.model.enums.MusicCopyrightStatus.REJECTED
                     )
               )
               AND (

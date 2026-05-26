@@ -10,6 +10,7 @@ import org.springframework.data.domain.Pageable;
 
 public interface IVideoModerationService {
     void runModeration(Long videoId);
+    void runModeration(Long videoId, boolean musicCopyrightCheckEnabled, boolean contentModerationCheckEnabled);
     VideoModerationSummaryResponseDTO getModerationStatus(Long videoId, Long requesterId, boolean isAdmin);
     Page<ModerationQueueItemResponseDTO> getAdminQueue(VideoModerationStatus status, Pageable pageable);
     VideoModerationDetailResponseDTO getAdminDetail(Long videoId);

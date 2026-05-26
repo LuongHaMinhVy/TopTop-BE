@@ -4,6 +4,7 @@ import lombok.Builder;
 import lombok.Data;
 
 import java.time.LocalDateTime;
+import java.util.List;
 
 @Data
 @Builder
@@ -18,4 +19,9 @@ public class VideoModerationSummaryResponseDTO {
     private String musicCopyrightReasonCode;
     private String musicCopyrightReasonMessage;
     private LocalDateTime musicCopyrightCheckedAt;
+    /** Quality issues detected across video frames: WATERMARK, QR_CODE, LOW_QUALITY */
+    private List<String> qualityIssues;
+    /** Human-readable Vietnamese summary of quality issues, null if none found */
+    private String qualityIssueMessage;
 }
+

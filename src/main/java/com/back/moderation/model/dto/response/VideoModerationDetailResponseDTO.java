@@ -20,6 +20,8 @@ public class VideoModerationDetailResponseDTO {
     private Double textRiskScore;
     private Double imageRiskScore;
     private List<String> categories;
+    private List<String> qualityIssues;
+    private String qualityIssueMessage;
     private List<VideoModerationFrameResponseDTO> frames;
     private List<ModerationAuditLogResponseDTO> auditLogs;
     private Long reportCount;

@@ -5,6 +5,7 @@ import com.back.common.utils.exception.ErrorCode;
 import com.back.block.repo.IUserBlockRepo;
 import com.back.follow.model.entity.Follow;
 import com.back.follow.repo.IFollowRepo;
+import com.back.notification.service.INotificationService;
 import com.back.user.model.dto.response.RelationshipStatus;
 import com.back.user.model.entity.User;
 import com.back.user.repo.IUserRepo;
@@ -29,6 +30,7 @@ public class FollowServiceImpl implements IFollowService {
     private final IUserRepo userRepo;
     private final IUserBlockRepo userBlockRepo;
     private final UserInfoMapper userInfoMapper;
+    private final INotificationService notificationService;
 
     private User getCurrentUser() {
         Authentication authentication = SecurityContextHolder.getContext().getAuthentication();
@@ -79,6 +81,14 @@ public class FollowServiceImpl implements IFollowService {
         targetUser.setFollowersCount(targetUser.getFollowersCount() + 1);
         userRepo.save(currentUser);
         userRepo.save(targetUser);
+
+        notificationService.createNotification(
+                targetUser,
+                currentUser,
+                null,
+                "FOLLOW",
+                currentUser.getUsername() + " started following you"
+        );
     }
 
     @Override

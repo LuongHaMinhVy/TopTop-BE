@@ -358,6 +358,8 @@ public class CollectionServiceImpl implements ICollectionService {
                     .visibility(video.getVisibility() != null ? video.getVisibility().name() : "PUBLIC")
                     .deleted(true)
                     .unavailable(true)
+                    .qualityIssuesJson(video.getQualityIssuesJson())
+                    .qualityIssueMessage(video.getQualityIssueMessage())
                     .build();
         }
 
@@ -390,6 +392,8 @@ public class CollectionServiceImpl implements ICollectionService {
                 .visibility(video.getVisibility() != null ? video.getVisibility().name() : "PUBLIC")
                 .deleted(false)
                 .unavailable(false)
+                .qualityIssuesJson(video.getQualityIssuesJson())
+                .qualityIssueMessage(video.getQualityIssueMessage())
                 .build();
     }
 

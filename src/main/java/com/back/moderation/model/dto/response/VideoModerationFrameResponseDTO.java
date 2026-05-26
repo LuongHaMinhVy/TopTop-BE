@@ -12,4 +12,5 @@ public class VideoModerationFrameResponseDTO {
     private Long timestampMs;
     private Double riskScore;
     private String categoriesJson;
+    private String qualityIssuesJson;
 }

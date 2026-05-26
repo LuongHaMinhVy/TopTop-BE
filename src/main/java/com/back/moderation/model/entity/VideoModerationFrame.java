@@ -37,4 +37,8 @@ public class VideoModerationFrame extends BaseEntity {
 
     @Column(name = "categories_json", columnDefinition = "TEXT")
     private String categoriesJson;
+
+    /** Comma-separated quality issues detected in this frame: WATERMARK, QR_CODE, LOW_QUALITY */
+    @Column(name = "quality_issues_json", columnDefinition = "TEXT")
+    private String qualityIssuesJson;
 }

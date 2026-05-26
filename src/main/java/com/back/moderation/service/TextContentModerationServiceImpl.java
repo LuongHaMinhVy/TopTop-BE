@@ -54,7 +54,9 @@ public class TextContentModerationServiceImpl implements ITextContentModerationS
 
         ErrorCode errorCode = "MESSAGE".equals(targetType)
                 ? ErrorCode.MESSAGE_REJECTED_BY_MODERATION
-                : ErrorCode.COMMENT_REJECTED_BY_MODERATION;
+                : "COMMENT".equals(targetType)
+                ? ErrorCode.COMMENT_REJECTED_BY_MODERATION
+                : ErrorCode.VIDEO_TEXT_REJECTED_BY_MODERATION;
         throw new AppException(errorCode, fieldName);
     }
 }

@@ -117,6 +117,15 @@ public class Video extends BaseEntity {
     @Column(name = "music_copyright_reason_message", columnDefinition = "TEXT")
     private String musicCopyrightReasonMessage;
 
+    @Column(name = "quality_issues_json", columnDefinition = "TEXT")
+    private String qualityIssuesJson;
+
+    @Column(name = "quality_issue_message", columnDefinition = "TEXT")
+    private String qualityIssueMessage;
+
+    @Column(name = "edit_instructions_json", columnDefinition = "TEXT")
+    private String editInstructionsJson;
+
     public boolean isDeleted() {
         return deletedAt != null;
     }

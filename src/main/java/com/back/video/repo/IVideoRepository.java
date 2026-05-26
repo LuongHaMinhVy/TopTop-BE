@@ -61,7 +61,6 @@ public interface IVideoRepository extends JpaRepository<Video, Long> {
                 )
               )
               AND v.moderationStatus = com.back.moderation.model.enums.VideoModerationStatus.APPROVED
-              AND v.musicCopyrightStatus <> com.back.moderation.model.enums.MusicCopyrightStatus.REJECTED
             """)
     Page<Video> findAllVisibleForViewer(@Param("viewerId") Long viewerId, Pageable pageable);
 
@@ -78,7 +77,6 @@ public interface IVideoRepository extends JpaRepository<Video, Long> {
                 (
                     v.visibility = com.back.video.model.enums.VideoVisibility.PUBLIC
                     AND v.moderationStatus = com.back.moderation.model.enums.VideoModerationStatus.APPROVED
-                    AND v.musicCopyrightStatus <> com.back.moderation.model.enums.MusicCopyrightStatus.REJECTED
                     AND (
                         :viewerId IS NULL
                         OR v.user.id = :viewerId
@@ -97,7 +95,6 @@ public interface IVideoRepository extends JpaRepository<Video, Long> {
                     :viewerId IS NOT NULL
                     AND v.visibility = com.back.video.model.enums.VideoVisibility.FRIENDS
                     AND v.moderationStatus = com.back.moderation.model.enums.VideoModerationStatus.APPROVED
-                    AND v.musicCopyrightStatus <> com.back.moderation.model.enums.MusicCopyrightStatus.REJECTED
                     AND NOT EXISTS (
                         SELECT b.id FROM UserBlock b
                         WHERE (b.blocker.id = :viewerId AND b.blocked = v.user)
@@ -143,7 +140,6 @@ public interface IVideoRepository extends JpaRepository<Video, Long> {
                      OR (b.blocked.id = :viewerId AND b.blocker = v.user)
               )
               AND v.moderationStatus = com.back.moderation.model.enums.VideoModerationStatus.APPROVED
-              AND v.musicCopyrightStatus <> com.back.moderation.model.enums.MusicCopyrightStatus.REJECTED
             ORDER BY v.createdAt DESC
             """)
     Page<Video> findFollowingFeed(@Param("viewerId") Long viewerId, Pageable pageable);
@@ -170,7 +166,6 @@ public interface IVideoRepository extends JpaRepository<Video, Long> {
                      OR (b.blocked.id = :viewerId AND b.blocker = v.user)
               )
               AND v.moderationStatus = com.back.moderation.model.enums.VideoModerationStatus.APPROVED
-              AND v.musicCopyrightStatus <> com.back.moderation.model.enums.MusicCopyrightStatus.REJECTED
             ORDER BY v.createdAt DESC
             """)
     Page<Video> findFriendsFeed(@Param("viewerId") Long viewerId, Pageable pageable);
@@ -193,7 +188,6 @@ public interface IVideoRepository extends JpaRepository<Video, Long> {
                     v.user.id = :userId
                     OR (
                         v.moderationStatus = com.back.moderation.model.enums.VideoModerationStatus.APPROVED
-                        AND v.musicCopyrightStatus <> com.back.moderation.model.enums.MusicCopyrightStatus.REJECTED
                     )
               )
             ORDER BY vl.id DESC
@@ -221,7 +215,6 @@ public interface IVideoRepository extends JpaRepository<Video, Long> {
                  OR LOWER(v.user.nickname) LIKE LOWER(CONCAT('%', :keyword, '%'))
               )
               AND v.moderationStatus = com.back.moderation.model.enums.VideoModerationStatus.APPROVED
-              AND v.musicCopyrightStatus <> com.back.moderation.model.enums.MusicCopyrightStatus.REJECTED
              ORDER BY v.likeCount DESC, v.viewCount DESC, v.createdAt DESC
             """)
     Page<Video> searchPublicVideos(@Param("keyword") String keyword, Pageable pageable);
@@ -233,7 +226,6 @@ public interface IVideoRepository extends JpaRepository<Video, Long> {
               AND v.sound.id = :soundId
               AND v.visibility = com.back.video.model.enums.VideoVisibility.PUBLIC
               AND v.moderationStatus = com.back.moderation.model.enums.VideoModerationStatus.APPROVED
-              AND v.musicCopyrightStatus <> com.back.moderation.model.enums.MusicCopyrightStatus.REJECTED
             ORDER BY v.createdAt DESC
             """)
     Page<Video> findPublicVideosBySoundId(@Param("soundId") Long soundId, Pageable pageable);
