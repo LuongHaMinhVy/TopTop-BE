@@ -2,6 +2,7 @@ package com.back.user.mapper;
 
 import com.back.user.model.dto.response.UserInfo;
 import com.back.user.model.dto.response.RelationshipStatus;
+import com.back.user.model.dto.response.PrivacySettings;
 import com.back.user.model.entity.User;
 import com.back.video.repo.IVideoRepository;
 import lombok.RequiredArgsConstructor;
@@ -39,18 +40,28 @@ public class UserInfoMapper {
                 .videoCount(videoRepository.countByUserIdAndDeletedAtIsNull(user.getId()))
                 .verified(user.getVerified())
                 .isPrivate(user.getIsPrivate())
-                .status(user.getStatus().name())
-                .accountType(user.getAccountType().name())
+                .status(user.getStatus() != null ? user.getStatus().name() : null)
+                .accountType(user.getAccountType() != null ? user.getAccountType().name() : null)
                 .websiteUrl(user.getWebsiteUrl())
                 .instagramHandle(user.getInstagramHandle())
                 .youtubeHandle(user.getYoutubeHandle())
                 .gender(user.getGender() != null ? user.getGender().name() : null)
                 .region(user.getRegion())
                 .dateOfBirth(user.getDateOfBirth())
+                .privacySettings(PrivacySettings.builder()
+                        .allowComments(user.getAllowComments())
+                        .allowDuet(user.getAllowDuet())
+                        .allowStitch(user.getAllowStitch())
+                        .allowDownload(user.getAllowDownload())
+                        .allowMessageFromEveryone(user.getAllowMessageFromEveryone())
+                        .defaultCommentPermission(Boolean.TRUE.equals(user.getAllowComments()) ? "EVERYONE" : "NO_ONE")
+                        .messagePrivacy(Boolean.TRUE.equals(user.getAllowMessageFromEveryone()) ? "EVERYONE" : "NO_ONE")
+                        .build())
                 .roles(roles)
                 .relationship(relationship)
                 .onboarded(user.getOnboarded())
                 .createdAt(user.getCreatedAt())
+                .deletedAt(user.getDeletedAt())
                 .build();
     }
 }

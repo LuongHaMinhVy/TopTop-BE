@@ -200,6 +200,17 @@ public class VideoController {
                 .build());
     }
 
+    @PostMapping("/{id}/not-interested")
+    @RateLimit(limit = 60, durationInSeconds = 60)
+    public ResponseEntity<ApiResponse<Void>> markNotInterested(@PathVariable Long id) {
+        videoService.markNotInterested(id);
+        return ResponseEntity.ok(ApiResponse.<Void>builder()
+                .message(Translator.toLocale("video.not_interested.success", "Video hidden from your recommendations"))
+                .status(HttpStatus.OK.value())
+                .timestamp(LocalDateTime.now())
+                .build());
+    }
+
     @GetMapping("/studio/analytics/views")
     public ResponseEntity<ApiResponse<List<VideoDailyMetricResponseDTO>>> getStudioDailyViews(
             @RequestParam(defaultValue = "7") int days) {

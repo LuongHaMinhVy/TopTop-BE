@@ -17,6 +17,6 @@ import lombok.NoArgsConstructor;
         private Boolean allowStitch;
         private Boolean allowDownload;
         private Boolean allowMessageFromEveryone;
-        private String commentFilter;
+        private String defaultCommentPermission;
         private String messagePrivacy;
     }

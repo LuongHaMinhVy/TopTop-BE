@@ -18,6 +18,8 @@ import com.back.sound.model.enums.SoundType;
 import com.back.sound.repo.ISoundRepository;
 import com.back.sound.service.IAudioProcessingService;
 import com.back.user.model.entity.User;
+import com.back.user.model.entity.UserContentFilterTag;
+import com.back.user.repo.IUserContentFilterTagRepo;
 import com.back.user.repo.IUserRepo;
 import com.back.video.model.dto.request.VideoResponseDTO;
 import com.back.video.model.dto.response.VideoDailyMetricResponseDTO;
@@ -26,9 +28,11 @@ import com.back.video.model.dto.response.VideoStatsResponseDTO;
 import com.back.video.model.dto.response.VideoUploadRequestDTO;
 import com.back.video.model.entity.Video;
 import com.back.video.model.entity.VideoLike;
+import com.back.video.model.entity.VideoNotInterested;
 import com.back.video.model.entity.VideoRepost;
 import com.back.video.model.entity.VideoView;
 import com.back.video.repo.IVideoLikeRepository;
+import com.back.video.repo.IVideoNotInterestedRepository;
 import com.back.video.repo.IVideoRepository;
 import com.back.video.repo.IVideoRepostRepository;
 import com.back.video.repo.IVideoViewRepository;
@@ -55,6 +59,7 @@ import java.time.LocalDateTime;
 import java.time.LocalDate;
 import java.time.LocalTime;
 import java.util.ArrayList;
+import java.util.LinkedHashSet;
 import java.util.Map;
 import java.util.HashSet;
 import java.util.List;
@@ -76,8 +81,13 @@ import com.back.moderation.service.IVideoModerationService;
 @RequiredArgsConstructor
 public class VideoServiceImpl implements IVideoService {
 
+    private static final int FEED_CANDIDATE_LIMIT = 500;
+    private static final int RECENT_VIEWED_EXCLUSION_LIMIT = 200;
+    private static final java.time.Duration FEED_ORDER_TTL = java.time.Duration.ofMinutes(15);
+
     private final IVideoRepository videoRepository;
     private final IVideoLikeRepository videoLikeRepository;
+    private final IVideoNotInterestedRepository videoNotInterestedRepository;
     private final IVideoRepostRepository videoRepostRepository;
     private final IUserRepo userRepo;
     private final R2StorageService storageService;
@@ -96,6 +106,7 @@ public class VideoServiceImpl implements IVideoService {
     private final ITextContentModerationService textContentModerationService;
     private final IVideoRecommendationService videoRecommendationService;
     private final IVideoModerationService videoModerationService;
+    private final IUserContentFilterTagRepo contentFilterTagRepo;
 
     @Override
     public InitVideoUploadResponseDTO initVideoUpload(InitVideoUploadRequestDTO requestDTO) {
@@ -325,13 +336,45 @@ public class VideoServiceImpl implements IVideoService {
         User currentUser = getCurrentUser();
         Long viewerId = currentUser == null ? null : currentUser.getId();
         
-        Pageable candidatePageable = PageRequest.of(0, 500, Sort.by(Sort.Direction.DESC, "createdAt"));
+        Pageable candidatePageable = PageRequest.of(0, FEED_CANDIDATE_LIMIT, Sort.by(Sort.Direction.DESC, "createdAt"));
         List<Video> candidates = new java.util.ArrayList<>(videoRepository.findAllVisibleForViewer(viewerId, candidatePageable).getContent());
+        candidates = distinctVideos(applyViewerFilters(candidates, currentUser));
+
+        if (currentUser != null && pageable.getPageNumber() > 0) {
+            List<Long> cachedOrder = readFeedOrder(currentUser.getId());
+            if (!cachedOrder.isEmpty()) {
+                candidates = distinctVideos(applyViewerFilters(applyFeedOrder(candidates, cachedOrder), currentUser));
+                return paginateList(candidates, pageable).map(this::mapToResponseDTO);
+            }
+        }
+
+        List<Long> recentlyViewedIds = currentUser == null
+                ? List.of()
+                : videoViewRepository.findRecentViewedVideoIdsByViewerId(
+                        currentUser.getId(),
+                        PageRequest.of(0, RECENT_VIEWED_EXCLUSION_LIMIT));
+
+        List<Video> unseenCandidates = excludeVideoIds(candidates, recentlyViewedIds);
+        List<Video> rankedCandidates = unseenCandidates.isEmpty() ? candidates : unseenCandidates;
+
+        rankedCandidates.sort((v1, v2) -> Double.compare(calculateForYouScore(v2, currentUser), calculateForYouScore(v1, currentUser)));
+        rankedCandidates = distinctVideos(new java.util.ArrayList<>(videoRecommendationService.rankForYou(rankedCandidates, currentUser)));
+
+        if (!recentlyViewedIds.isEmpty()) {
+            Set<Long> rankedIds = rankedCandidates.stream()
+                    .map(Video::getId)
+                    .collect(java.util.stream.Collectors.toSet());
+            candidates.stream()
+                    .filter(video -> !rankedIds.contains(video.getId()))
+                    .forEach(rankedCandidates::add);
+            rankedCandidates = distinctVideos(rankedCandidates);
+        }
+
+        if (currentUser != null && pageable.getPageNumber() == 0) {
+            cacheFeedOrder(currentUser.getId(), rankedCandidates);
+        }
         
-        candidates.sort((v1, v2) -> Double.compare(calculateForYouScore(v2, currentUser), calculateForYouScore(v1, currentUser)));
-        candidates = new java.util.ArrayList<>(videoRecommendationService.rankForYou(candidates, currentUser));
-        
-        return paginateList(candidates, pageable).map(this::mapToResponseDTO);
+        return paginateList(rankedCandidates, pageable).map(this::mapToResponseDTO);
     }
 
     @Override
@@ -424,6 +467,38 @@ public class VideoServiceImpl implements IVideoService {
                 ));
 
         return mapToStatsDTO(video, true);
+    }
+
+    @Override
+    @Transactional
+    public void markNotInterested(Long id) {
+        User currentUser = getCurrentUser();
+        if (currentUser == null) {
+            throw new AppException(ErrorCode.UNAUTHORIZED);
+        }
+
+        Video video = videoRepository.findById(id)
+                .orElseThrow(() -> new AppException(ErrorCode.VIDEO_NOT_FOUND));
+        if (video.isDeleted()) {
+            throw new AppException(ErrorCode.VIDEO_NOT_FOUND);
+        }
+        userBlockService.assertNotBlockedEitherWay(currentUser, video.getUser());
+        checkVisibilityOrThrow(video, currentUser);
+
+        boolean isLiked = videoLikeRepository.existsByUserIdAndVideoId(currentUser.getId(), id);
+        boolean isSaved = ISavedVideoRepository.existsByUserIdAndVideoId(currentUser.getId(), id);
+        if (isLiked || isSaved) {
+            throw new AppException(ErrorCode.CANNOT_MARK_INTERESTED_VIDEO_NOT_INTERESTED);
+        }
+
+        if (!videoNotInterestedRepository.existsByUserIdAndVideoId(currentUser.getId(), id)) {
+            videoNotInterestedRepository.save(VideoNotInterested.builder()
+                    .user(currentUser)
+                    .video(video)
+                    .build());
+        }
+
+        redisTemplate.delete(feedOrderKey(currentUser.getId()));
     }
 
     @Override
@@ -960,6 +1035,7 @@ public class VideoServiceImpl implements IVideoService {
         
         Pageable candidatePageable = org.springframework.data.domain.PageRequest.of(0, 500);
         List<Video> candidates = new java.util.ArrayList<>(videoRepository.findFollowingFeed(currentUser.getId(), candidatePageable).getContent());
+        candidates = applyViewerFilters(candidates, currentUser);
         
         candidates.sort((v1, v2) -> Double.compare(calculateFollowingScore(v2, currentUser), calculateFollowingScore(v1, currentUser)));
         
@@ -975,10 +1051,120 @@ public class VideoServiceImpl implements IVideoService {
         
         Pageable candidatePageable = org.springframework.data.domain.PageRequest.of(0, 500);
         List<Video> candidates = new java.util.ArrayList<>(videoRepository.findFriendsFeed(currentUser.getId(), candidatePageable).getContent());
+        candidates = applyViewerFilters(candidates, currentUser);
         
         candidates.sort((v1, v2) -> Double.compare(calculateFriendsScore(v2, currentUser), calculateFriendsScore(v1, currentUser)));
         
         return paginateList(candidates, pageable).map(this::mapToResponseDTO);
+    }
+
+    private List<Video> excludeVideoIds(List<Video> candidates, List<Long> excludedIds) {
+        if (excludedIds == null || excludedIds.isEmpty()) {
+            return new ArrayList<>(candidates);
+        }
+
+        Set<Long> excluded = new HashSet<>(excludedIds);
+        return candidates.stream()
+                .filter(video -> !excluded.contains(video.getId()))
+                .collect(java.util.stream.Collectors.toCollection(ArrayList::new));
+    }
+
+    private List<Video> applyContentFilters(List<Video> candidates, User currentUser) {
+        if (currentUser == null || candidates == null || candidates.isEmpty()) {
+            return candidates;
+        }
+
+        Set<String> filteredTags = contentFilterTagRepo.findByUserOrderByCreatedAtDesc(currentUser).stream()
+                .map(UserContentFilterTag::getTag)
+                .filter(tag -> tag != null && !tag.isBlank())
+                .map(String::toLowerCase)
+                .collect(java.util.stream.Collectors.toSet());
+
+        if (filteredTags.isEmpty()) {
+            return candidates;
+        }
+
+        return candidates.stream()
+                .filter(video -> video.getHashtags() == null || video.getHashtags().stream()
+                        .map(Hashtag::getName)
+                        .filter(tag -> tag != null && !tag.isBlank())
+                        .map(String::toLowerCase)
+                        .noneMatch(filteredTags::contains))
+                .collect(java.util.stream.Collectors.toCollection(ArrayList::new));
+    }
+
+    private List<Video> applyViewerFilters(List<Video> candidates, User currentUser) {
+        List<Video> filtered = applyContentFilters(candidates, currentUser);
+        if (currentUser == null || filtered == null || filtered.isEmpty()) {
+            return filtered;
+        }
+
+        List<Long> notInterestedIds = videoNotInterestedRepository.findVideoIdsByUserId(currentUser.getId());
+        return excludeVideoIds(filtered, notInterestedIds);
+    }
+
+    private List<Video> distinctVideos(List<Video> videos) {
+        if (videos == null || videos.isEmpty()) {
+            return new ArrayList<>();
+        }
+
+        Set<Long> seenIds = new LinkedHashSet<>();
+        return videos.stream()
+                .filter(video -> video != null && video.getId() != null && seenIds.add(video.getId()))
+                .collect(java.util.stream.Collectors.toCollection(ArrayList::new));
+    }
+
+    private void cacheFeedOrder(Long userId, List<Video> videos) {
+        List<Long> orderedIds = distinctVideos(videos).stream()
+                .map(Video::getId)
+                .toList();
+        try {
+            redisTemplate.opsForValue().set(feedOrderKey(userId), orderedIds, FEED_ORDER_TTL);
+        } catch (Exception e) {
+            log.warn("Could not cache feed order for user {}: {}", userId, e.getMessage());
+        }
+    }
+
+    private List<Long> readFeedOrder(Long userId) {
+        Object cached;
+        try {
+            cached = redisTemplate.opsForValue().get(feedOrderKey(userId));
+        } catch (Exception e) {
+            log.warn("Could not read feed order for user {}: {}", userId, e.getMessage());
+            return List.of();
+        }
+
+        if (!(cached instanceof List<?> cachedList)) {
+            return List.of();
+        }
+
+        return cachedList.stream()
+                .filter(Number.class::isInstance)
+                .map(Number.class::cast)
+                .map(Number::longValue)
+                .toList();
+    }
+
+    private String feedOrderKey(Long userId) {
+        return "feed:foryou:order:" + userId;
+    }
+
+    private List<Video> applyFeedOrder(List<Video> candidates, List<Long> orderedIds) {
+        Map<Long, Video> byId = candidates.stream()
+                .collect(java.util.stream.Collectors.toMap(Video::getId, video -> video, (left, right) -> left));
+
+        List<Video> ordered = orderedIds.stream()
+                .map(byId::get)
+                .filter(video -> video != null)
+                .collect(java.util.stream.Collectors.toCollection(ArrayList::new));
+
+        Set<Long> orderedVideoIds = ordered.stream()
+                .map(Video::getId)
+                .collect(java.util.stream.Collectors.toCollection(LinkedHashSet::new));
+        candidates.stream()
+                .filter(video -> !orderedVideoIds.contains(video.getId()))
+                .forEach(ordered::add);
+        return ordered;
     }
 
     private Page<Video> paginateList(List<Video> list, Pageable pageable) {

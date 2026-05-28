@@ -32,15 +32,16 @@ public class AdviceController {
     @ExceptionHandler(AppException.class)
     public ResponseEntity<ApiResponse<Object>> handleAppException(AppException ex) {
         ErrorCode errorCode = ex.getErrorCode();
+        String message = ex.getMessage();
 
         return ResponseEntity.status(errorCode.getStatus()).body(
                 ApiResponse.builder()
-                        .message(errorCode.getMessage())
+                        .message(message)
                         .data(null)
                         .errors(List.of(
                                 ErrorResponse.builder()
                                         .field(ex.getField())
-                                        .message(errorCode.getMessage())
+                                        .message(message)
                                         .build()
                         ))
                         .status(errorCode.getStatus().value())

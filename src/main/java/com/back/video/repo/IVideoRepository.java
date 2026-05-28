@@ -18,13 +18,14 @@ import java.util.List;
 public interface IVideoRepository extends JpaRepository<Video, Long> {
     
     @EntityGraph(attributePaths = {"user"})
-    @Query("SELECT v FROM Video v WHERE v.deletedAt IS NULL")
+    @Query("SELECT v FROM Video v WHERE v.deletedAt IS NULL AND v.user.deletedAt IS NULL")
     Page<Video> findAll(Pageable pageable);
 
     @EntityGraph(attributePaths = {"user"})
     @Query("""
-            SELECT v FROM Video v
+            SELECT DISTINCT v FROM Video v
             WHERE v.deletedAt IS NULL
+              AND v.user.deletedAt IS NULL
               AND (
                 (
                     v.visibility = com.back.video.model.enums.VideoVisibility.PUBLIC
@@ -65,7 +66,7 @@ public interface IVideoRepository extends JpaRepository<Video, Long> {
     Page<Video> findAllVisibleForViewer(@Param("viewerId") Long viewerId, Pageable pageable);
 
     @EntityGraph(attributePaths = {"user"})
-    @Query("SELECT v FROM Video v WHERE v.user.id = :userId AND v.deletedAt IS NULL")
+    @Query("SELECT v FROM Video v WHERE v.user.id = :userId AND v.deletedAt IS NULL AND v.user.deletedAt IS NULL")
     Page<Video> findByUserId(@Param("userId") Long userId, Pageable pageable);
 
     @EntityGraph(attributePaths = {"user"})
@@ -73,6 +74,7 @@ public interface IVideoRepository extends JpaRepository<Video, Long> {
             SELECT v FROM Video v
             WHERE v.user.id = :userId
               AND v.deletedAt IS NULL
+              AND v.user.deletedAt IS NULL
               AND (
                 (
                     v.visibility = com.back.video.model.enums.VideoVisibility.PUBLIC
@@ -120,6 +122,7 @@ public interface IVideoRepository extends JpaRepository<Video, Long> {
     @Query("""
             SELECT v FROM Video v
             WHERE v.deletedAt IS NULL
+              AND v.user.deletedAt IS NULL
               AND v.user.id IN (
                   SELECT f.following.id FROM Follow f
                   WHERE f.follower.id = :viewerId
@@ -148,6 +151,7 @@ public interface IVideoRepository extends JpaRepository<Video, Long> {
     @Query("""
             SELECT v FROM Video v
             WHERE v.deletedAt IS NULL
+              AND v.user.deletedAt IS NULL
               AND v.user.id IN (
                   SELECT f.following.id FROM Follow f
                   WHERE f.follower.id = :viewerId
@@ -176,6 +180,7 @@ public interface IVideoRepository extends JpaRepository<Video, Long> {
             JOIN VideoLike vl ON vl.video = v
             WHERE vl.user.id = :userId
               AND v.deletedAt IS NULL
+              AND v.user.deletedAt IS NULL
               AND (
                     v.user.id = :userId
                     OR NOT EXISTS (
@@ -196,17 +201,22 @@ public interface IVideoRepository extends JpaRepository<Video, Long> {
 
     long countByUserIdAndDeletedAtIsNull(Long userId);
 
+    long countByModerationStatus(VideoModerationStatus status);
+
+    List<Video> findAllByUserId(Long userId);
+
     @Query("SELECT v FROM Video v WHERE v.deletedAt IS NOT NULL AND v.deletedAt < :cutoff")
     List<Video> findExpiredVideos(LocalDateTime cutoff);
 
     @EntityGraph(attributePaths = {"user", "hashtags"})
-    @Query("SELECT v FROM Video v WHERE LOWER(v.user.username) = LOWER(:username) AND v.id = :id AND v.deletedAt IS NULL")
+    @Query("SELECT v FROM Video v WHERE LOWER(v.user.username) = LOWER(:username) AND v.id = :id AND v.deletedAt IS NULL AND v.user.deletedAt IS NULL")
     java.util.Optional<Video> findByUserUsernameAndId(String username, Long id);
 
     @EntityGraph(attributePaths = {"user"})
     @Query("""
             SELECT v FROM Video v
             WHERE v.deletedAt IS NULL
+              AND v.user.deletedAt IS NULL
               AND v.visibility = com.back.video.model.enums.VideoVisibility.PUBLIC
               AND (
                     LOWER(v.title) LIKE LOWER(CONCAT('%', :keyword, '%'))
@@ -223,6 +233,7 @@ public interface IVideoRepository extends JpaRepository<Video, Long> {
     @Query("""
             SELECT v FROM Video v
             WHERE v.deletedAt IS NULL
+              AND v.user.deletedAt IS NULL
               AND v.sound.id = :soundId
               AND v.visibility = com.back.video.model.enums.VideoVisibility.PUBLIC
               AND v.moderationStatus = com.back.moderation.model.enums.VideoModerationStatus.APPROVED

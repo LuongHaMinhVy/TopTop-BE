@@ -9,6 +9,7 @@ import lombok.*;
 import lombok.experimental.SuperBuilder;
 
 import java.time.LocalDate;
+import java.time.LocalDateTime;
 import java.util.Set;
 
 @Entity
@@ -71,6 +72,9 @@ public class User extends BaseEntity {
     @Column(nullable = false)
     private UserStatus status = UserStatus.ACTIVE;
 
+    @Column(name = "status_reason", length = 500)
+    private String statusReason;
+
     @Column(length = 500)
     private String websiteUrl;
 
@@ -117,6 +121,12 @@ public class User extends BaseEntity {
     @Builder.Default
     @Column(nullable = false)
     private Boolean onboarded = true;
+
+    @Column(name = "deleted_at")
+    private LocalDateTime deletedAt;
+
+    @Column(name = "deletion_scheduled_at")
+    private LocalDateTime deletionScheduledAt;
 
     @ManyToMany(fetch = FetchType.EAGER)
     @JoinTable(

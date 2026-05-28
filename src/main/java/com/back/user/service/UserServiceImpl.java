@@ -4,10 +4,20 @@ import com.back.common.utils.exception.AppException;
 import com.back.common.utils.exception.ErrorCode;
 import com.back.follow.service.IFollowService;
 import com.back.user.mapper.UserInfoMapper;
+import com.back.user.model.dto.request.AccountStatusActionRequestDTO;
+import com.back.user.model.dto.request.AccountStatusConfirmRequestDTO;
+import com.back.user.model.dto.request.AccountStatusOtpRequestDTO;
+import com.back.user.model.dto.request.ChangePasswordRequestDTO;
+import com.back.user.model.dto.request.ContentFilterTagRequestDTO;
+import com.back.user.model.dto.request.UpdatePrivacySettingsRequestDTO;
+import com.back.user.model.dto.response.ContentFilterTagResponseDTO;
 import com.back.user.model.dto.response.MentionSuggestionResponseDTO;
 import com.back.user.model.dto.response.RelationshipStatus;
 import com.back.user.model.dto.response.UserInfo;
 import com.back.user.model.entity.User;
+import com.back.user.model.entity.UserContentFilterTag;
+import com.back.user.model.enums.UserStatus;
+import com.back.user.repo.IUserContentFilterTagRepo;
 import com.back.user.repo.IUserRepo;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -16,7 +26,9 @@ import org.springframework.data.domain.PageRequest;
 import org.springframework.security.core.Authentication;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.security.oauth2.client.authentication.OAuth2AuthenticationToken;
+import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 
 import com.back.common.service.R2StorageService;
 import org.springframework.web.multipart.MultipartFile;
@@ -24,6 +36,7 @@ import org.springframework.web.multipart.MultipartFile;
 import jakarta.servlet.http.HttpServletRequest;
 
 import java.util.List;
+import java.time.LocalDateTime;
 
 @Slf4j
 @Service
@@ -33,6 +46,9 @@ public class UserServiceImpl implements IUserService {
     private final IFollowService followService;
     private final R2StorageService storageService;
     private final UserInfoMapper userInfoMapper;
+    private final IUserContentFilterTagRepo contentFilterTagRepo;
+    private final PasswordEncoder passwordEncoder;
+    private final AccountStatusOtpService accountStatusOtpService;
 
     private User getCurrentUser() {
         Authentication authentication = SecurityContextHolder.getContext().getAuthentication();
@@ -47,8 +63,12 @@ public class UserServiceImpl implements IUserService {
             email = authentication.getName();
         }
 
-        return userRepo.findByEmail(email)
+        User user = userRepo.findByEmail(email)
                 .orElseThrow(() -> new AppException(ErrorCode.EMAIL_NOT_FOUND));
+        if (user.getDeletedAt() != null) {
+            throw new AppException(ErrorCode.ACCOUNT_BANNED);
+        }
+        return user;
     }
 
     @Override
@@ -137,6 +157,134 @@ public class UserServiceImpl implements IUserService {
     }
 
     @Override
+    @Transactional
+    @org.springframework.cache.annotation.CacheEvict(value = "userInfo", key = "#result.email")
+    public UserInfo updatePrivacySettings(UpdatePrivacySettingsRequestDTO request) {
+        User currentUser = getCurrentUser();
+        if (currentUser == null) {
+            throw new AppException(ErrorCode.UNAUTHORIZED);
+        }
+
+        if (request.getIsPrivate() != null) {
+            currentUser.setIsPrivate(request.getIsPrivate());
+        }
+        if (request.getAllowComments() != null) {
+            currentUser.setAllowComments(request.getAllowComments());
+        }
+        if (request.getAllowMessageFromEveryone() != null) {
+            currentUser.setAllowMessageFromEveryone(request.getAllowMessageFromEveryone());
+        }
+
+        return userInfoMapper.buildUserInfo(userRepo.save(currentUser));
+    }
+
+    @Override
+    @Transactional
+    public void changePassword(ChangePasswordRequestDTO request) {
+        User currentUser = getCurrentUser();
+        if (currentUser == null) {
+            throw new AppException(ErrorCode.UNAUTHORIZED);
+        }
+        if (!passwordEncoder.matches(request.getCurrentPassword(), currentUser.getPassword())) {
+            throw new AppException(ErrorCode.INVALID_PASSWORD);
+        }
+
+        currentUser.setPassword(passwordEncoder.encode(request.getNewPassword()));
+        userRepo.save(currentUser);
+    }
+
+    @Override
+    @Transactional
+    @Deprecated
+    public void updateAccountStatus(AccountStatusActionRequestDTO request) {
+        AccountStatusOtpRequestDTO otpRequest = new AccountStatusOtpRequestDTO();
+        otpRequest.setAction(request.getAction());
+        sendAccountStatusOtp(otpRequest);
+    }
+
+    @Override
+    @Transactional
+    public void sendAccountStatusOtp(AccountStatusOtpRequestDTO request) {
+        User currentUser = getCurrentUser();
+        if (currentUser == null) {
+            throw new AppException(ErrorCode.UNAUTHORIZED);
+        }
+        accountStatusOtpService.sendOtp(currentUser, request.getAction());
+    }
+
+    @Override
+    @Transactional
+    public void confirmAccountStatus(AccountStatusConfirmRequestDTO request) {
+        User currentUser = getCurrentUser();
+        if (currentUser == null) {
+            throw new AppException(ErrorCode.UNAUTHORIZED);
+        }
+        accountStatusOtpService.verifyOtp(currentUser, request.getAction(), request.getOtp());
+
+        String action = request.getAction().trim().toUpperCase();
+        LocalDateTime now = LocalDateTime.now();
+        if ("DEACTIVATE".equals(action)) {
+            currentUser.setStatus(UserStatus.SUSPENDED);
+            currentUser.setDeletedAt(now);
+            currentUser.setDeletionScheduledAt(null);
+        } else if ("DELETE".equals(action)) {
+            currentUser.setStatus(UserStatus.BANNED);
+            currentUser.setDeletedAt(now);
+            currentUser.setDeletionScheduledAt(now.plusDays(30));
+        } else {
+            throw new AppException(ErrorCode.BAD_REQUEST);
+        }
+
+        userRepo.save(currentUser);
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public List<ContentFilterTagResponseDTO> getContentFilterTags() {
+        User currentUser = getCurrentUser();
+        if (currentUser == null) {
+            throw new AppException(ErrorCode.UNAUTHORIZED);
+        }
+
+        return contentFilterTagRepo.findByUserOrderByCreatedAtDesc(currentUser)
+                .stream()
+                .map(this::mapContentFilterTag)
+                .toList();
+    }
+
+    @Override
+    @Transactional
+    public ContentFilterTagResponseDTO addContentFilterTag(ContentFilterTagRequestDTO request) {
+        User currentUser = getCurrentUser();
+        if (currentUser == null) {
+            throw new AppException(ErrorCode.UNAUTHORIZED);
+        }
+
+        String normalizedTag = normalizeTag(request.getTag());
+        UserContentFilterTag tag = contentFilterTagRepo.findByUserAndTag(currentUser, normalizedTag)
+                .orElseGet(() -> UserContentFilterTag.builder()
+                        .user(currentUser)
+                        .tag(normalizedTag)
+                        .build());
+        if (request.getSampleThumbnailUrl() != null && !request.getSampleThumbnailUrl().isBlank()) {
+            tag.setSampleThumbnailUrl(request.getSampleThumbnailUrl().trim());
+        }
+
+        return mapContentFilterTag(contentFilterTagRepo.save(tag));
+    }
+
+    @Override
+    @Transactional
+    public void deleteContentFilterTag(String tag) {
+        User currentUser = getCurrentUser();
+        if (currentUser == null) {
+            throw new AppException(ErrorCode.UNAUTHORIZED);
+        }
+
+        contentFilterTagRepo.deleteByUserAndTag(currentUser, normalizeTag(tag));
+    }
+
+    @Override
     public String uploadAvatar(MultipartFile file) throws java.io.IOException {
         User currentUser = getCurrentUser();
         if (currentUser == null) {
@@ -164,5 +312,25 @@ public class UserServiceImpl implements IUserService {
 
     private boolean isReservedUserUsername(String username) {
         return username != null && "admin".equalsIgnoreCase(username.trim());
+    }
+
+    private String normalizeTag(String tag) {
+        String normalized = tag == null ? "" : tag.trim().toLowerCase();
+        if (normalized.startsWith("#")) {
+            normalized = normalized.substring(1);
+        }
+        if (normalized.isBlank() || normalized.length() > 80) {
+            throw new AppException(ErrorCode.BAD_REQUEST);
+        }
+        return normalized;
+    }
+
+    private ContentFilterTagResponseDTO mapContentFilterTag(UserContentFilterTag tag) {
+        return ContentFilterTagResponseDTO.builder()
+                .id(tag.getId())
+                .tag(tag.getTag())
+                .sampleThumbnailUrl(tag.getSampleThumbnailUrl())
+                .createdAt(tag.getCreatedAt())
+                .build();
     }
 }

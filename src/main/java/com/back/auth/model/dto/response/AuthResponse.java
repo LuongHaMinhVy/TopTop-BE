@@ -13,4 +13,7 @@ public class AuthResponse {
     private String refreshToken;
     private String tokenType;
     private Long expiresIn;
+    private Boolean reactivationRequired;
+    private String reactivationReason;
+    private java.time.LocalDateTime deletionScheduledAt;
 }

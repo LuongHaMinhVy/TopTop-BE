@@ -31,6 +31,7 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.time.Instant;
 import java.time.LocalDate;
+import java.time.LocalDateTime;
 import java.util.HashSet;
 import java.util.Set;
 import java.util.UUID;
@@ -68,12 +69,20 @@ public class AuthServiceImpl implements IAuthService {
             throw new AppException(ErrorCode.WRONG_EMAIL_OR_PASSWORD);
         }
 
-        if (user.getStatus().equals(UserStatus.BANNED)) {
-            throw new AppException(ErrorCode.ACCOUNT_BANNED);
+        boolean reactivationRequired = false;
+        if (user.getDeletedAt() != null) {
+            if (user.getDeletionScheduledAt() != null && !user.getDeletionScheduledAt().isAfter(LocalDateTime.now())) {
+                throw new AppException(ErrorCode.ACCOUNT_BANNED);
+            }
+            reactivationRequired = true;
         }
 
-        if (user.getStatus().equals(UserStatus.SUSPENDED)) {
-            throw new AppException(ErrorCode.ACCOUNT_SUSPENDED);
+        if (!reactivationRequired && user.getStatus().equals(UserStatus.BANNED)) {
+            throw accountStatusException(user);
+        }
+
+        if (!reactivationRequired && user.getStatus().equals(UserStatus.SUSPENDED)) {
+            throw accountStatusException(user);
         }
         if (!user.getVerified()) {
             throw new AppException(ErrorCode.EMAIL_NOT_VERIFIED);
@@ -106,11 +115,59 @@ public class AuthServiceImpl implements IAuthService {
 
         AuthResponse authResponse = AuthResponse.builder()
                 .user(userInfo)
+                .reactivationRequired(reactivationRequired)
+                .reactivationReason(reactivationRequired ? reactivationReason(user) : null)
+                .deletionScheduledAt(reactivationRequired ? user.getDeletionScheduledAt() : null)
                 .build();
 
         return AuthResult.builder()
                 .authResponse(authResponse)
                 .refreshTokenExpiresIn(refreshTokenExpiration / 1000)
+                .build();
+    }
+
+    @Override
+    @Transactional
+    public AuthResponse reactivateAccount(HttpServletRequest request, HttpServletResponse response) {
+        String token = ICookieService.get(request, "accessToken");
+        if (token == null) {
+            token = jwtService.extractFromHeader(request);
+        }
+        if (token == null || !jwtService.isAccessTokenValid(token)) {
+            throw new AppException(ErrorCode.UNAUTHORIZED);
+        }
+
+        String email = jwtService.extractUsername(token);
+        User user = userRepo.findByEmail(email)
+                .orElseThrow(() -> new AppException(ErrorCode.USER_NOT_FOUND));
+
+        if (user.getDeletedAt() != null
+                && user.getDeletionScheduledAt() != null
+                && !user.getDeletionScheduledAt().isAfter(LocalDateTime.now())) {
+            throw new AppException(ErrorCode.ACCOUNT_BANNED);
+        }
+
+        user.setDeletedAt(null);
+        user.setDeletionScheduledAt(null);
+        user.setStatus(UserStatus.ACTIVE);
+        user.setStatusReason(null);
+        user = userRepo.save(user);
+
+        String accessToken = jwtService.generateAccessToken(user);
+        String refreshToken = jwtService.generateRefreshToken(user);
+
+        ICookieService.add(response, "accessToken", accessToken,
+                (int)(accessTokenExpiration / 1000), request);
+        ICookieService.add(response, "refreshToken", refreshToken,
+                (int)(refreshTokenExpiration / 1000), request);
+
+        return AuthResponse.builder()
+                .user(userInfoMapper.buildUserInfo(user))
+                .accessToken(accessToken)
+                .refreshToken(refreshToken)
+                .tokenType("Bearer")
+                .expiresIn(accessTokenExpiration)
+                .reactivationRequired(false)
                 .build();
     }
 
@@ -196,6 +253,10 @@ public class AuthServiceImpl implements IAuthService {
 
         User user = userRepo.findByEmail(email)
                 .orElseThrow(() -> new AppException(ErrorCode.USER_NOT_FOUND));
+
+        if (user.getDeletedAt() != null) {
+            throw new AppException(ErrorCode.ACCOUNT_BANNED);
+        }
 
         if (user.getVerified()) {
             throw new AppException(ErrorCode.EMAIL_ALREADY_VERIFIED);
@@ -437,6 +498,7 @@ public class AuthServiceImpl implements IAuthService {
 
         user.setUsername(onboardRequest.getUsername());
         user.setDateOfBirth(LocalDate.parse(onboardRequest.getDateOfBirth()));
+        user.setPassword(passwordEncoder.encode(onboardRequest.getPassword()));
         user.setOnboarded(true);
 
         user = userRepo.save(user);
@@ -461,5 +523,25 @@ public class AuthServiceImpl implements IAuthService {
 
     private boolean isReservedUserUsername(String username) {
         return username != null && "admin".equalsIgnoreCase(username.trim());
+    }
+
+    private AppException accountStatusException(User user) {
+        ErrorCode errorCode = user.getStatus() == UserStatus.BANNED
+                ? ErrorCode.ACCOUNT_BANNED
+                : ErrorCode.ACCOUNT_SUSPENDED;
+        return new AppException(errorCode, null, accountStatusMessage(errorCode, user.getStatusReason()));
+    }
+
+    private String accountStatusMessage(ErrorCode errorCode, String reason) {
+        if (reason == null || reason.isBlank()) {
+            return errorCode.getMessage();
+        }
+        return errorCode.getMessage() + ". "
+                + Translator.toLocale("error.account_status_reason_prefix", "Reason")
+                + ": " + reason.trim();
+    }
+
+    private String reactivationReason(User user) {
+        return user.getDeletionScheduledAt() == null ? "DEACTIVATED" : "PENDING_DELETION";
     }
 }

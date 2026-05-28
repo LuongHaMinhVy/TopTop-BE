@@ -58,6 +58,16 @@ public class AuthController{
                 .build());
     }
 
+    @PostMapping("/reactivate")
+    public ResponseEntity<ApiResponse<AuthResponse>> reactivate(HttpServletRequest request, HttpServletResponse response){
+        return ResponseEntity.ok(ApiResponse.<AuthResponse>builder()
+                .message(Translator.toLocale("auth.reactivate.success", "Account reactivated successfully"))
+                .data(authService.reactivateAccount(request, response))
+                .status(HttpStatus.OK.value())
+                .timestamp(LocalDateTime.now())
+                .build());
+    }
+
     @PostMapping("/verify-email")
     public ResponseEntity<ApiResponse<Void>> verifyEmail(@RequestParam String token){
         authService.verifyEmail(token);

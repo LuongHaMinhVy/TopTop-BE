@@ -29,6 +29,7 @@ public interface IVideoService {
     VideoStatsResponseDTO repostVideo(Long id);
     VideoStatsResponseDTO unrepostVideo(Long id);
     VideoStatsResponseDTO recordVideoView(Long id);
+    void markNotInterested(Long id);
     List<VideoDailyMetricResponseDTO> getStudioDailyViews(int days);
     VideoResponseDTO getVideoByUsernameAndId(String username, Long videoId);
     VideoResponseDTO updateVideo(Long id, VideoUploadRequestDTO requestDTO);

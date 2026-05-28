@@ -9,6 +9,8 @@ import org.springframework.data.repository.query.Param;
 import org.springframework.stereotype.Repository;
 
 import java.util.Optional;
+import java.time.LocalDateTime;
+import java.util.List;
 
 @Repository
 public interface IUserRepo extends JpaRepository<User, Long>{
@@ -18,11 +20,14 @@ public interface IUserRepo extends JpaRepository<User, Long>{
 
     boolean existsByEmail(String email);
 
+    List<User> findByDeletionScheduledAtIsNotNullAndDeletionScheduledAtBefore(LocalDateTime cutoff);
+
     Optional<User> findByUsername(String usernameOrEmail);
 
     @Query("""
             SELECT u FROM User u
             WHERE u.username = :username
+              AND u.deletedAt IS NULL
               AND LOWER(u.username) <> 'admin'
               AND NOT EXISTS (
                   SELECT r.id FROM u.roles r
@@ -34,6 +39,7 @@ public interface IUserRepo extends JpaRepository<User, Long>{
     @Query("""
             SELECT u FROM User u
             WHERE LOWER(u.username) <> 'admin'
+              AND u.deletedAt IS NULL
               AND NOT EXISTS (
                   SELECT r.id FROM u.roles r
                   WHERE r.name = com.back.user.model.enums.RoleName.ROLE_ADMIN
@@ -48,6 +54,7 @@ public interface IUserRepo extends JpaRepository<User, Long>{
                   LOWER(u.username) LIKE LOWER(CONCAT('%', :keyword, '%'))
                OR LOWER(u.nickname) LIKE LOWER(CONCAT('%', :keyword, '%'))
             )
+              AND u.deletedAt IS NULL
               AND LOWER(u.username) <> 'admin'
               AND NOT EXISTS (
                   SELECT r.id FROM u.roles r
@@ -68,6 +75,7 @@ public interface IUserRepo extends JpaRepository<User, Long>{
                   LOWER(u.username) LIKE LOWER(CONCAT('%', :keyword, '%'))
               OR LOWER(u.nickname) LIKE LOWER(CONCAT('%', :keyword, '%'))
             )
+              AND u.deletedAt IS NULL
               AND LOWER(u.username) <> 'admin'
               AND NOT EXISTS (
                   SELECT r.id FROM u.roles r
@@ -85,6 +93,7 @@ public interface IUserRepo extends JpaRepository<User, Long>{
     @Query("""
             SELECT u FROM User u
             WHERE (:viewerId IS NULL OR u.id <> :viewerId)
+              AND u.deletedAt IS NULL
               AND LOWER(u.username) <> 'admin'
               AND NOT EXISTS (
                   SELECT r.id FROM u.roles r
@@ -106,6 +115,7 @@ public interface IUserRepo extends JpaRepository<User, Long>{
     @Query("""
             SELECT u FROM User u
             WHERE u.id <> :viewerId
+              AND u.deletedAt IS NULL
               AND LOWER(u.username) <> 'admin'
               AND NOT EXISTS (
                   SELECT r.id FROM u.roles r
@@ -129,4 +139,53 @@ public interface IUserRepo extends JpaRepository<User, Long>{
               u.totalLikes DESC
             """)
     Page<User> findSuggestedFriends(@Param("viewerId") Long viewerId, Pageable pageable);
+
+    @Query("""
+            SELECT u FROM User u
+            WHERE LOWER(u.username) <> 'admin'
+              AND u.deletedAt IS NULL
+              AND NOT EXISTS (
+                  SELECT r.id FROM u.roles r
+                  WHERE r.name = com.back.user.model.enums.RoleName.ROLE_ADMIN
+              )
+            ORDER BY u.createdAt DESC
+            """)
+    Page<User> findAllPublicUsersPage(Pageable pageable);
+
+    @Query("""
+            SELECT u FROM User u
+            WHERE (
+                  LOWER(u.username) LIKE LOWER(CONCAT('%', :keyword, '%'))
+               OR LOWER(u.nickname)  LIKE LOWER(CONCAT('%', :keyword, '%'))
+               OR LOWER(u.email)     LIKE LOWER(CONCAT('%', :keyword, '%'))
+            )
+              AND u.deletedAt IS NULL
+              AND LOWER(u.username) <> 'admin'
+              AND NOT EXISTS (
+                  SELECT r.id FROM u.roles r
+                  WHERE r.name = com.back.user.model.enums.RoleName.ROLE_ADMIN
+              )
+            ORDER BY u.createdAt DESC
+            """)
+    Page<User> adminSearchUsers(@Param("keyword") String keyword, Pageable pageable);
+
+    @Query("""
+            SELECT u FROM User u
+            WHERE (:keyword IS NULL OR :keyword = '' OR (
+                  LOWER(u.username) LIKE LOWER(CONCAT('%', :keyword, '%'))
+               OR LOWER(u.nickname) LIKE LOWER(CONCAT('%', :keyword, '%'))
+               OR LOWER(u.email) LIKE LOWER(CONCAT('%', :keyword, '%'))
+            ))
+              AND (:status IS NULL OR u.status = :status)
+              AND LOWER(u.username) <> 'admin'
+              AND NOT EXISTS (
+                  SELECT r.id FROM u.roles r
+                  WHERE r.name = com.back.user.model.enums.RoleName.ROLE_ADMIN
+              )
+            ORDER BY u.createdAt DESC
+            """)
+    Page<User> adminFindUsers(
+            @Param("keyword") String keyword,
+            @Param("status") com.back.user.model.enums.UserStatus status,
+            Pageable pageable);
 }

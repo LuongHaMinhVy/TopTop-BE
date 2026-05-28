@@ -21,6 +21,8 @@ import org.springframework.web.client.RestTemplate;
 import org.springframework.web.util.UriComponentsBuilder;
 
 import java.net.URI;
+import java.time.Duration;
+import java.time.Instant;
 import java.time.LocalDateTime;
 import java.time.temporal.ChronoUnit;
 import java.util.ArrayList;
@@ -38,8 +40,9 @@ import java.util.stream.Collectors;
 @RequiredArgsConstructor
 public class GeminiVideoRecommendationService implements IVideoRecommendationService {
 
-    private static final int MAX_CANDIDATES_FOR_AI = 80;
-    private static final int MAX_HISTORY_ITEMS = 20;
+    private static final int MAX_CANDIDATES_FOR_AI = 40;
+    private static final int MAX_HISTORY_ITEMS = 12;
+    private static final Duration RANKING_CACHE_TTL = Duration.ofMinutes(10);
 
     private final RestTemplate restTemplate;
     private final ObjectMapper objectMapper;
@@ -62,7 +65,7 @@ public class GeminiVideoRecommendationService implements IVideoRecommendationSer
     @Value("${ai.gemini.endpoint:https://generativelanguage.googleapis.com/v1beta}")
     private String endpoint;
 
-    private final java.util.Map<Long, List<Long>> asyncRankingCache = new java.util.concurrent.ConcurrentHashMap<>();
+    private final java.util.Map<Long, RankingCacheEntry> asyncRankingCache = new java.util.concurrent.ConcurrentHashMap<>();
     private final java.util.Set<Long> calculatingUsers = java.util.concurrent.ConcurrentHashMap.newKeySet();
 
     @Override
@@ -72,9 +75,10 @@ public class GeminiVideoRecommendationService implements IVideoRecommendationSer
         }
 
         Long userId = viewer.getId();
-        List<Long> cachedOrderedIds = asyncRankingCache.get(userId);
+        RankingCacheEntry cachedEntry = asyncRankingCache.get(userId);
+        List<Long> cachedOrderedIds = cachedEntry == null ? List.of() : cachedEntry.orderedIds();
 
-        if (!calculatingUsers.contains(userId)) {
+        if (shouldRefresh(cachedEntry) && !calculatingUsers.contains(userId)) {
             calculatingUsers.add(userId);
             List<Video> aiCandidates = candidates.stream()
                     .limit(MAX_CANDIDATES_FOR_AI)
@@ -84,7 +88,7 @@ public class GeminiVideoRecommendationService implements IVideoRecommendationSer
                 try {
                     List<Long> orderedIds = requestGeminiRanking(aiCandidates, viewer);
                     if (!orderedIds.isEmpty()) {
-                        asyncRankingCache.put(userId, orderedIds);
+                        asyncRankingCache.put(userId, new RankingCacheEntry(orderedIds, Instant.now()));
                     }
                 } catch (Exception e) {
                     log.warn("Background Gemini ranking failed: {}", e.getMessage());
@@ -99,6 +103,10 @@ public class GeminiVideoRecommendationService implements IVideoRecommendationSer
         }
 
         return candidates;
+    }
+
+    private boolean shouldRefresh(RankingCacheEntry cachedEntry) {
+        return cachedEntry == null || cachedEntry.createdAt().plus(RANKING_CACHE_TTL).isBefore(Instant.now());
     }
 
     private boolean isConfigured() {
@@ -300,5 +308,8 @@ public class GeminiVideoRecommendationService implements IVideoRecommendationSer
     private long ageHours(LocalDateTime createdAt) {
         if (createdAt == null) return 0L;
         return Math.max(0L, ChronoUnit.HOURS.between(createdAt, LocalDateTime.now()));
+    }
+
+    private record RankingCacheEntry(List<Long> orderedIds, Instant createdAt) {
     }
 }

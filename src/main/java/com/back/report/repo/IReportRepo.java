@@ -19,4 +19,8 @@ public interface IReportRepo extends JpaRepository<Report, Long> {
     );
 
     Page<Report> findByStatusOrderByCreatedAtDesc(ReportStatus status, Pageable pageable);
+
+    Page<Report> findAllByOrderByCreatedAtDesc(Pageable pageable);
+
+    long countByStatus(ReportStatus status);
 }

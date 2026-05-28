@@ -26,4 +26,12 @@ public interface IVideoViewRepository extends JpaRepository<VideoView, Long> {
             ORDER BY vv.createdAt DESC
             """)
     List<Video> findRecentViewedVideosByViewerId(@Param("viewerId") Long viewerId, Pageable pageable);
+
+    @Query("""
+            SELECT vv.video.id FROM VideoView vv
+            WHERE vv.viewer.id = :viewerId
+            GROUP BY vv.video.id
+            ORDER BY MAX(vv.createdAt) DESC
+            """)
+    List<Long> findRecentViewedVideoIdsByViewerId(@Param("viewerId") Long viewerId, Pageable pageable);
 }

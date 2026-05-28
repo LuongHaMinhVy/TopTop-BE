@@ -85,11 +85,13 @@ public class CustomOAuth2UserService extends DefaultOAuth2UserService {
     }
 
     private void updateExistingUser(User user, String name, String avatarUrl, String provider) {
-        boolean changed = false;
-        if (Boolean.FALSE.equals(user.getOnboarded())) {
-            user.setOnboarded(true);
-            changed = true;
+        if (user.getDeletedAt() != null) {
+            return;
         }
+        if (user.getStatus() != UserStatus.ACTIVE) {
+            return;
+        }
+        boolean changed = false;
         if (name != null && !name.equals(user.getNickname())) {
             user.setNickname(name);
             changed = true;

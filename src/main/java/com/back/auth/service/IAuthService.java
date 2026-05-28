@@ -11,6 +11,8 @@ public interface IAuthService{
 
     AuthResult login(LoginRequest loginRequest, HttpServletResponse response, HttpServletRequest request);
 
+    AuthResponse reactivateAccount(HttpServletRequest request, HttpServletResponse response);
+
     void logout(HttpServletRequest request, HttpServletResponse response);
 
     void register(RegisterRequest registerRequest);

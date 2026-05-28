@@ -64,4 +64,6 @@ public class UserInfo {
 
     private LocalDateTime createdAt;
 
+    private LocalDateTime deletedAt;
+
 }

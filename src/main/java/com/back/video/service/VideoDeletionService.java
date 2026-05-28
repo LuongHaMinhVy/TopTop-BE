@@ -8,6 +8,7 @@ import com.back.moderation.repository.IVideoModerationFrameRepository;
 import com.back.moderation.repository.IVideoModerationResultRepository;
 import com.back.video.model.entity.Video;
 import com.back.video.repo.IVideoLikeRepository;
+import com.back.video.repo.IVideoNotInterestedRepository;
 import com.back.video.repo.IVideoRepository;
 import com.back.video.repo.IVideoRepostRepository;
 import com.back.video.repo.IVideoViewRepository;
@@ -27,6 +28,7 @@ public class VideoDeletionService {
     private final ISavedVideoRepository savedVideoRepository;
     private final IVideoRepostRepository videoRepostRepository;
     private final IVideoLikeRepository videoLikeRepository;
+    private final IVideoNotInterestedRepository videoNotInterestedRepository;
     private final IVideoViewRepository videoViewRepository;
     private final IMessageAttachmentRepository messageAttachmentRepository;
     private final IVideoModerationFrameRepository moderationFrameRepository;
@@ -44,6 +46,7 @@ public class VideoDeletionService {
         savedVideoRepository.deleteByVideoId(videoId);
         videoRepostRepository.deleteByVideoId(videoId);
         videoLikeRepository.deleteByVideoId(videoId);
+        videoNotInterestedRepository.deleteByVideoId(videoId);
         videoViewRepository.deleteByVideoId(videoId);
         moderationFrameRepository.deleteByVideoId(videoId);
         moderationResultRepository.deleteByVideoId(videoId);
