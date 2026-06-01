@@ -137,6 +137,14 @@ public class SecurityConfig {
                         .requestMatchers("/api/v1/admin/**")
                         .hasAuthority(RoleName.ROLE_ADMIN.name())
 
+                        // ── Livestream endpoints ──────────────────────────────────
+                        .requestMatchers(HttpMethod.GET, "/api/v1/lives/feed").permitAll()
+                        .requestMatchers(HttpMethod.GET, "/api/v1/lives/*").permitAll()
+                        .requestMatchers(HttpMethod.GET, "/api/v1/lives/*/chat/messages").permitAll()
+                        .requestMatchers(HttpMethod.GET, "/api/v1/lives/gifts/catalog").permitAll()
+                        .requestMatchers("/api/v1/lives/**")
+                        .hasAnyAuthority(RoleName.ROLE_USER.name(), RoleName.ROLE_ADMIN.name())
+
                         .anyRequest().authenticated()
                 )
 

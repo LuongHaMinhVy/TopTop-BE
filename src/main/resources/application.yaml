@@ -129,3 +129,8 @@ acrcloud:
 ffmpeg:
   path: ${FFMPEG_PATH:ffmpeg}
   max-frames: ${FFMPEG_MAX_FRAMES:5}
+
+livekit:
+  url: ${LIVEKIT_URL}
+  api-key: ${LIVEKIT_API_KEY}
+  api-secret: ${LIVEKIT_API_SECRET}

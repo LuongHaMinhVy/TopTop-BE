@@ -16,7 +16,6 @@ import java.util.UUID;
 
 /**
  * Extracts JPEG frames from a remote video URL using the system FFmpeg binary.
- * No FFmpeg Java library is required – the binary is invoked via ProcessBuilder.
  */
 @Slf4j
 @Service

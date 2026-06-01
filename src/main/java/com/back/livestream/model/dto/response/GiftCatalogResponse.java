@@ -1,0 +1,14 @@
+package com.back.livestream.model.dto.response;
+
+import lombok.Builder;
+import lombok.Data;
+
+@Data
+@Builder
+public class GiftCatalogResponse {
+    private Long id;
+    private String name;
+    private String iconUrl;
+    private String animationUrl;
+    private int coinPrice;
+}

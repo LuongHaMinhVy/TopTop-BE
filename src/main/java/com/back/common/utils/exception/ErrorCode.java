@@ -81,6 +81,17 @@ public enum ErrorCode {
     COLLECTION_ACCESS_DENIED(HttpStatus.FORBIDDEN, "You do not have permission to access this collection"),
     CHAT_ACCESS_DENIED(HttpStatus.FORBIDDEN, "You do not have permission to access this conversation"),
     
+    LIVESTREAM_NOT_FOUND(HttpStatus.NOT_FOUND, "Livestream not found"),
+    LIVESTREAM_ALREADY_ACTIVE(HttpStatus.CONFLICT, "You already have an active livestream"),
+    LIVESTREAM_NOT_LIVE(HttpStatus.BAD_REQUEST, "Livestream is not currently live"),
+    LIVESTREAM_ENDED(HttpStatus.BAD_REQUEST, "Livestream has already ended"),
+    USER_BANNED_FROM_LIVE(HttpStatus.FORBIDDEN, "You are banned from this livestream"),
+    CHAT_DISABLED(HttpStatus.BAD_REQUEST, "Chat is disabled for this livestream"),
+    GIFTS_DISABLED(HttpStatus.BAD_REQUEST, "Gifts are disabled for this livestream"),
+    GIFT_NOT_FOUND(HttpStatus.NOT_FOUND, "Gift not found"),
+    MESSAGE_NOT_FOUND(HttpStatus.NOT_FOUND, "Message not found"),
+    FORBIDDEN(HttpStatus.FORBIDDEN, "You do not have permission to perform this action"),
+
     INTERNAL_ERROR(HttpStatus.INTERNAL_SERVER_ERROR, "Internal server error");
     private final HttpStatus status;
     private final String message;

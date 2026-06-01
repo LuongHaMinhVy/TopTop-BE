@@ -58,6 +58,8 @@ dependencies {
     implementation 'org.springframework.boot:spring-boot-starter-websocket'
     implementation 'org.springframework.boot:spring-boot-starter-json'
 
+    implementation 'io.livekit:livekit-server:0.9.2'
+
     testImplementation 'org.springframework.boot:spring-boot-starter-test'
 
 }
