@@ -5,6 +5,7 @@ import com.back.common.utils.Translator;
 import com.back.report.model.dto.request.ReviewReportRequestDTO;
 import com.back.report.model.dto.response.AdminReportResponseDTO;
 import com.back.report.service.IAdminReportService;
+import com.back.user.repo.IUserRepo;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.Page;
@@ -25,6 +26,7 @@ import java.time.LocalDateTime;
 public class AdminReportController {
 
     private final IAdminReportService adminReportService;
+    private final IUserRepo userRepo;
 
     @GetMapping
     public ResponseEntity<ApiResponse<Page<AdminReportResponseDTO>>> listReports(
@@ -62,7 +64,8 @@ public class AdminReportController {
     private Long getCurrentAdminId() {
         Authentication auth = SecurityContextHolder.getContext().getAuthentication();
         if (auth == null) return null;
-        // Admin ID resolution delegated to service layer if needed
-        return null;
+        String email = auth.getName();
+        if (email == null || email.isBlank()) return null;
+        return userRepo.findByEmail(email).map(user -> user.getId()).orElse(null);
     }
 }

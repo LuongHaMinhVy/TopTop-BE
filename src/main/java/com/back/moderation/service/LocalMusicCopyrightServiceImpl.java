@@ -20,23 +20,23 @@ public class LocalMusicCopyrightServiceImpl implements IMusicCopyrightService {
                 && Boolean.TRUE.equals(sound.getIsPublic())) {
             return new MusicCopyrightResult(
                     MusicCopyrightStatus.APPROVED,
-                    "PLATFORM_SOUND_LICENSED",
-                    "Âm thanh được chọn từ thư viện công khai của hệ thống."
+                    "PLATFORM_SOUND_RECOGNIZED",
+                    sound.getTitle()
             );
         }
 
         if (sound != null && sound.getType() == SoundType.ORIGINAL) {
             return new MusicCopyrightResult(
-                    MusicCopyrightStatus.NEED_REVIEW,
-                    "ORIGINAL_SOUND_REQUIRES_REVIEW",
-                    "Âm thanh gốc cần kiểm tra bản quyền thủ công hoặc bằng provider fingerprint."
+                    MusicCopyrightStatus.APPROVED,
+                    "ORIGINAL_SOUND_NOT_RECOGNIZED",
+                    null
             );
         }
 
         return new MusicCopyrightResult(
-                MusicCopyrightStatus.NEED_REVIEW,
-                "EMBEDDED_AUDIO_REQUIRES_REVIEW",
-                "Video có thể chứa âm thanh nhúng cần kiểm tra bản quyền."
+                MusicCopyrightStatus.APPROVED,
+                "MUSIC_RECOGNITION_NOT_CONFIGURED",
+                null
         );
     }
 }

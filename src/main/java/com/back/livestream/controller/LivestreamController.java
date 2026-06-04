@@ -48,6 +48,21 @@ public class LivestreamController {
                 .build());
     }
 
+    /**
+     * Lightweight status check used by the frontend polling loop.
+     * Returns only id, status, and roomName — no auth required, no heavy joins.
+     */
+    @GetMapping("/{id}/status")
+    public ResponseEntity<ApiResponse<com.back.livestream.model.dto.response.LivestreamReadinessResponse>> getStreamStatus(
+            @PathVariable Long id) {
+        return ResponseEntity.ok(ApiResponse.<com.back.livestream.model.dto.response.LivestreamReadinessResponse>builder()
+                .message("Stream status fetched")
+                .data(livestreamService.getStreamReadiness(id))
+                .status(HttpStatus.OK.value())
+                .timestamp(LocalDateTime.now())
+                .build());
+    }
+
     @GetMapping("/me")
     public ResponseEntity<ApiResponse<List<LivestreamResponse>>> getMyLivestreams() {
         return ResponseEntity.ok(ApiResponse.<List<LivestreamResponse>>builder()
@@ -97,6 +112,16 @@ public class LivestreamController {
         livestreamService.endLivestream(id);
         return ResponseEntity.ok(ApiResponse.<Void>builder()
                 .message("Livestream ended")
+                .status(HttpStatus.OK.value())
+                .timestamp(LocalDateTime.now())
+                .build());
+    }
+
+    @PostMapping("/{id}/leave")
+    public ResponseEntity<ApiResponse<Void>> leaveLivestream(@PathVariable Long id) {
+        livestreamService.leaveStream(id);
+        return ResponseEntity.ok(ApiResponse.<Void>builder()
+                .message("Left livestream")
                 .status(HttpStatus.OK.value())
                 .timestamp(LocalDateTime.now())
                 .build());

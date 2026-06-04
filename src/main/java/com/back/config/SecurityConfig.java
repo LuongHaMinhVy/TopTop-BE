@@ -77,6 +77,7 @@ public class SecurityConfig {
                         // ── Video endpoints ──────────────────────────────────────
                         .requestMatchers(HttpMethod.GET, "/api/v1/videos").permitAll()
                         .requestMatchers(HttpMethod.GET, "/api/v1/videos/{id}").permitAll()
+                        .requestMatchers(HttpMethod.GET, "/api/v1/videos/{id}/description-translation").permitAll()
                         .requestMatchers(HttpMethod.GET, "/api/v1/videos/user/{userId}").permitAll()
                         .requestMatchers(HttpMethod.GET, "/api/v1/videos/@{username}/{videoId}").permitAll()
                         .requestMatchers(HttpMethod.GET, "/api/v1/videos/{videoId}/comments").permitAll()
@@ -142,6 +143,8 @@ public class SecurityConfig {
                         .requestMatchers(HttpMethod.GET, "/api/v1/lives/*").permitAll()
                         .requestMatchers(HttpMethod.GET, "/api/v1/lives/*/chat/messages").permitAll()
                         .requestMatchers(HttpMethod.GET, "/api/v1/lives/gifts/catalog").permitAll()
+                        // LiveKit webhook: verified by JWT signature inside the controller
+                        .requestMatchers(HttpMethod.POST, "/api/v1/lives/livekit/webhook").permitAll()
                         .requestMatchers("/api/v1/lives/**")
                         .hasAnyAuthority(RoleName.ROLE_USER.name(), RoleName.ROLE_ADMIN.name())
 

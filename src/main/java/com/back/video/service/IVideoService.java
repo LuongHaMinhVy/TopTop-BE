@@ -2,6 +2,7 @@ package com.back.video.service;
 
 import com.back.video.model.dto.request.VideoResponseDTO;
 import com.back.video.model.dto.response.VideoDailyMetricResponseDTO;
+import com.back.video.model.dto.response.VideoDescriptionTranslationResponseDTO;
 import com.back.video.model.dto.response.VideoStatsResponseDTO;
 import com.back.video.model.dto.response.VideoUploadRequestDTO;
 import org.springframework.data.domain.Page;
@@ -20,6 +21,7 @@ public interface IVideoService {
     VideoResponseDTO completeVideoUpload(CompleteVideoUploadRequestDTO requestDTO, MultipartFile cover);
     VideoResponseDTO uploadVideo(MultipartFile file, MultipartFile cover, VideoUploadRequestDTO requestDTO) throws IOException;
     VideoResponseDTO getVideoById(Long id);
+    VideoDescriptionTranslationResponseDTO translateDescription(Long id, String targetLocale);
     Page<VideoResponseDTO> getAllVideos(Pageable pageable);
     Page<VideoResponseDTO> getVideosByUserId(Long userId, Pageable pageable);
     void deleteVideo(Long id);

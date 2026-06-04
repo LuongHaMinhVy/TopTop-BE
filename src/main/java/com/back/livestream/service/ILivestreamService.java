@@ -19,6 +19,9 @@ public interface ILivestreamService {
 
     LivestreamResponse getLivestream(Long livestreamId);
 
+    /** Lightweight status-only check used by frontend polling loop. */
+    LivestreamReadinessResponse getStreamReadiness(Long livestreamId);
+
     List<LivestreamResponse> getLiveFeed(int page, int size);
 
     LiveChatMessageResponse sendChatMessage(Long livestreamId, SendChatMessageRequest request);
@@ -39,4 +42,21 @@ public interface ILivestreamService {
     void banUser(Long livestreamId, Long userId, String reason);
 
     List<LivestreamResponse> getMyLivestreams();
+
+    // ── Viewer count sync (called by webhook + join/leave) ────────────────────
+
+    /** Increments viewerCount in DB and pushes real-time update via WebSocket. */
+    void incrementViewerCount(Long livestreamId);
+
+    /** Decrements viewerCount in DB (floor 0) and pushes real-time update via WebSocket. */
+    void decrementViewerCount(Long livestreamId);
+
+    /** Called when LiveKit room_finished event arrives — marks stream ENDED if not already. */
+    void handleRoomFinished(Long livestreamId);
+
+    /** Explicit viewer leave — records leftAt in participant table and decrements viewer count. */
+    void leaveStream(Long livestreamId);
+
+    /** Processes the raw LiveKit webhook event body, verifies signature, parses data, and updates status/viewer count. */
+    void handleLivekitWebhook(String authHeader, String rawBody);
 }

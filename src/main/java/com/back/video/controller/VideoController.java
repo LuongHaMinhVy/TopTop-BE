@@ -7,6 +7,7 @@ import com.back.video.model.dto.request.InitVideoUploadRequestDTO;
 import com.back.video.model.dto.request.CompleteVideoUploadRequestDTO;
 import com.back.video.model.dto.response.InitVideoUploadResponseDTO;
 import com.back.video.model.dto.response.VideoDailyMetricResponseDTO;
+import com.back.video.model.dto.response.VideoDescriptionTranslationResponseDTO;
 import com.back.video.model.dto.response.VideoStatsResponseDTO;
 import com.back.video.model.dto.response.VideoUploadRequestDTO;
 import com.back.video.service.IVideoService;
@@ -81,6 +82,19 @@ public class VideoController {
         VideoResponseDTO data = videoService.getVideoById(id);
         return ResponseEntity.ok(ApiResponse.<VideoResponseDTO>builder()
                 .message(Translator.toLocale("video.retrieve.success", "Video retrieved successfully"))
+                .data(data)
+                .status(HttpStatus.OK.value())
+                .timestamp(LocalDateTime.now())
+                .build());
+    }
+
+    @GetMapping("/{id}/description-translation")
+    public ResponseEntity<ApiResponse<VideoDescriptionTranslationResponseDTO>> translateDescription(
+            @PathVariable Long id,
+            @RequestParam(defaultValue = "vi") String targetLocale) {
+        VideoDescriptionTranslationResponseDTO data = videoService.translateDescription(id, targetLocale);
+        return ResponseEntity.ok(ApiResponse.<VideoDescriptionTranslationResponseDTO>builder()
+                .message(Translator.toLocale("video.description_translation.success", "Video description translated successfully"))
                 .data(data)
                 .status(HttpStatus.OK.value())
                 .timestamp(LocalDateTime.now())

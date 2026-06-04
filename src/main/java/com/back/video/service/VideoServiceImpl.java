@@ -23,6 +23,7 @@ import com.back.user.repo.IUserContentFilterTagRepo;
 import com.back.user.repo.IUserRepo;
 import com.back.video.model.dto.request.VideoResponseDTO;
 import com.back.video.model.dto.response.VideoDailyMetricResponseDTO;
+import com.back.video.model.dto.response.VideoDescriptionTranslationResponseDTO;
 import com.back.video.model.dto.response.VideoRepostUserResponseDTO;
 import com.back.video.model.dto.response.VideoStatsResponseDTO;
 import com.back.video.model.dto.response.VideoUploadRequestDTO;
@@ -107,6 +108,7 @@ public class VideoServiceImpl implements IVideoService {
     private final IVideoRecommendationService videoRecommendationService;
     private final IVideoModerationService videoModerationService;
     private final IUserContentFilterTagRepo contentFilterTagRepo;
+    private final GeminiDescriptionTranslationService descriptionTranslationService;
 
     @Override
     public InitVideoUploadResponseDTO initVideoUpload(InitVideoUploadRequestDTO requestDTO) {
@@ -332,6 +334,30 @@ public class VideoServiceImpl implements IVideoService {
     }
 
     @Override
+    public VideoDescriptionTranslationResponseDTO translateDescription(Long id, String targetLocale) {
+        Video video = videoRepository.findById(id)
+                .orElseThrow(() -> new AppException(ErrorCode.FILE_NOT_FOUND));
+        if (video.isDeleted()) {
+            throw new AppException(ErrorCode.FILE_NOT_FOUND);
+        }
+
+        User currentUser = getCurrentUser();
+        userBlockService.assertNotBlockedEitherWay(currentUser, video.getUser());
+        checkVisibilityOrThrow(video, currentUser);
+
+        String sourceText = firstNonBlank(video.getDescription(), video.getTitle());
+        String normalizedLocale = normalizeTranslationLocale(targetLocale);
+        String translatedText = descriptionTranslationService.translate(sourceText, normalizedLocale);
+
+        return VideoDescriptionTranslationResponseDTO.builder()
+                .videoId(video.getId())
+                .sourceText(sourceText)
+                .translatedText(translatedText)
+                .targetLocale(normalizedLocale)
+                .build();
+    }
+
+    @Override
     public Page<VideoResponseDTO> getAllVideos(Pageable pageable) {
         User currentUser = getCurrentUser();
         Long viewerId = currentUser == null ? null : currentUser.getId();
@@ -484,6 +510,10 @@ public class VideoServiceImpl implements IVideoService {
         }
         userBlockService.assertNotBlockedEitherWay(currentUser, video.getUser());
         checkVisibilityOrThrow(video, currentUser);
+
+        if (video.getUser().getId().equals(currentUser.getId())) {
+            throw new AppException(ErrorCode.CANNOT_MARK_OWN_VIDEO_NOT_INTERESTED);
+        }
 
         boolean isLiked = videoLikeRepository.existsByUserIdAndVideoId(currentUser.getId(), id);
         boolean isSaved = ISavedVideoRepository.existsByUserIdAndVideoId(currentUser.getId(), id);
@@ -1024,6 +1054,27 @@ public class VideoServiceImpl implements IVideoService {
 
     private boolean isPublishedAfterModeration(Video video) {
         return video.getModerationStatus() == VideoModerationStatus.APPROVED;
+    }
+
+    private String firstNonBlank(String primary, String fallback) {
+        if (primary != null && !primary.isBlank()) {
+            return primary.trim();
+        }
+        return fallback == null ? "" : fallback.trim();
+    }
+
+    private String normalizeTranslationLocale(String targetLocale) {
+        if (targetLocale == null || targetLocale.isBlank()) {
+            return "vi";
+        }
+        String normalized = targetLocale.toLowerCase(java.util.Locale.ROOT);
+        if (normalized.startsWith("vi")) {
+            return "vi";
+        }
+        if (normalized.startsWith("en")) {
+            return "en";
+        }
+        return normalized.length() > 16 ? normalized.substring(0, 16) : normalized;
     }
 
     @Override

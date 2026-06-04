@@ -1,5 +1,6 @@
 package com.back.report.model.dto.response;
 
+import com.back.report.model.enums.ReportResolutionAction;
 import com.back.report.model.enums.ReportStatus;
 import com.back.report.model.enums.ReportTargetType;
 import lombok.Builder;
@@ -21,7 +22,9 @@ public class AdminReportResponseDTO {
     private String reasonLabel;
     private String additionalNote;
     private ReportStatus status;
+    private ReportResolutionAction resolutionAction;
     private Long reviewedBy;
+    private String reviewNote;
     private LocalDateTime reviewedAt;
     private LocalDateTime createdAt;
 }

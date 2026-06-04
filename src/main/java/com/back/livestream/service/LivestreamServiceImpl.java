@@ -12,6 +12,8 @@ import com.back.livestream.model.enums.*;
 import com.back.livestream.repo.*;
 import com.back.user.model.entity.User;
 import com.back.user.repo.IUserRepo;
+import io.livekit.server.WebhookReceiver;
+import livekit.LivekitWebhook;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.data.domain.PageRequest;
@@ -262,22 +264,38 @@ public class LivestreamServiceImpl implements ILivestreamService {
             throw new AppException(ErrorCode.USER_BANNED_FROM_LIVE);
         }
 
+        // Determine role before saving participant
+        ParticipantRole role = ls.getHost().getId().equals(viewer.getId())
+                ? ParticipantRole.HOST
+                : (isModerator(ls, viewer) ? ParticipantRole.MODERATOR : ParticipantRole.VIEWER);
+
         // Upsert participant
+        boolean isNewJoin = participantRepo
+                .findFirstByLivestreamAndUserOrderByIdDesc(ls, viewer)
+                .map(p -> p.getLeftAt() != null) // was previously left
+                .orElse(true); // brand new
+
         LivestreamParticipant participant = participantRepo
                 .findFirstByLivestreamAndUserOrderByIdDesc(ls, viewer)
                 .orElse(LivestreamParticipant.builder()
                         .livestream(ls)
                         .user(viewer)
-                        .role(ParticipantRole.VIEWER)
+                        .role(role)
                         .build());
         participant.setJoinedAt(LocalDateTime.now());
         participant.setLeftAt(null);
+        participant.setRole(role);
         participantRepo.save(participant);
 
-        // Determine role
-        ParticipantRole role = ls.getHost().getId().equals(viewer.getId())
-                ? ParticipantRole.HOST
-                : (isModerator(ls, viewer) ? ParticipantRole.MODERATOR : ParticipantRole.VIEWER);
+        // Increment viewer count for non-host participants joining (webhooks may be slow)
+        if (role == ParticipantRole.VIEWER && isNewJoin) {
+            ls.setViewerCount(ls.getViewerCount() + 1);
+            if (ls.getViewerCount() > ls.getPeakViewerCount()) {
+                ls.setPeakViewerCount(ls.getViewerCount());
+            }
+            ls = livestreamRepo.save(ls);
+            eventPublisher.publishViewerCount(ls.getId(), ls.getViewerCount());
+        }
 
         return buildJoinResponse(ls, viewer, role);
     }
@@ -297,9 +315,17 @@ public class LivestreamServiceImpl implements ILivestreamService {
 
         ls.setStatus(LivestreamStatus.ENDED);
         ls.setEndedAt(LocalDateTime.now());
+        ls.setViewerCount(0);
         livestreamRepo.save(ls);
 
         eventPublisher.publishStreamEnded(livestreamId);
+
+        try {
+            liveKitTokenService.deleteRoom(ls.getRoomName());
+        } catch (Exception e) {
+            log.warn("Livestream {} was marked ENDED, but LiveKit room cleanup failed: {}",
+                    livestreamId, e.getMessage());
+        }
     }
 
     // ─── Feed ────────────────────────────────────────────────────────────────
@@ -322,6 +348,16 @@ public class LivestreamServiceImpl implements ILivestreamService {
         User viewer = getCurrentUser();
         Livestream ls = requireLivestream(livestreamId);
         return mapToResponse(ls, viewer);
+    }
+
+    @Override
+    public LivestreamReadinessResponse getStreamReadiness(Long livestreamId) {
+        Livestream ls = requireLivestream(livestreamId);
+        return LivestreamReadinessResponse.builder()
+                .id(ls.getId())
+                .status(ls.getStatus())
+                .roomName(ls.getRoomName())
+                .build();
     }
 
     @Override
@@ -468,7 +504,6 @@ public class LivestreamServiceImpl implements ILivestreamService {
         Livestream ls = requireLivestream(livestreamId);
         if (!isHostOrModerator(ls, mod) && !isAdmin(mod)) throw new AppException(ErrorCode.FORBIDDEN);
 
-        // Unpin all first
         chatRepo.findPinnedMessages(ls).forEach(m -> { m.setPinned(false); chatRepo.save(m); });
 
         LivestreamChatMessage msg = chatRepo.findById(messageId)
@@ -502,5 +537,128 @@ public class LivestreamServiceImpl implements ILivestreamService {
                 .targetUser(targetUser).targetMessageId(targetMessageId)
                 .action(action).reason(reason)
                 .build());
+    }
+
+    // ─── Viewer count sync ────────────────────────────────────────────────────
+
+    @Override
+    @Transactional
+    public void incrementViewerCount(Long livestreamId) {
+        Livestream ls = requireLivestream(livestreamId);
+        if (ls.getStatus() != LivestreamStatus.LIVE) return;
+
+        ls.setViewerCount(ls.getViewerCount() + 1);
+        if (ls.getViewerCount() > ls.getPeakViewerCount()) {
+            ls.setPeakViewerCount(ls.getViewerCount());
+        }
+        livestreamRepo.save(ls);
+        eventPublisher.publishViewerCount(livestreamId, ls.getViewerCount());
+        log.debug("Viewer count incremented to {} for stream {}", ls.getViewerCount(), livestreamId);
+    }
+
+    @Override
+    @Transactional
+    public void decrementViewerCount(Long livestreamId) {
+        Livestream ls = requireLivestream(livestreamId);
+        int updated = Math.max(0, ls.getViewerCount() - 1);
+        ls.setViewerCount(updated);
+        livestreamRepo.save(ls);
+        eventPublisher.publishViewerCount(livestreamId, updated);
+        log.debug("Viewer count decremented to {} for stream {}", updated, livestreamId);
+    }
+
+    @Override
+    @Transactional
+    public void handleRoomFinished(Long livestreamId) {
+        Livestream ls = requireLivestream(livestreamId);
+        if (ls.getStatus() == LivestreamStatus.ENDED || ls.getStatus() == LivestreamStatus.CANCELLED) {
+            return; // idempotent
+        }
+        log.info("LiveKit room_finished for stream {} — marking ENDED", livestreamId);
+        ls.setStatus(LivestreamStatus.ENDED);
+        ls.setEndedAt(java.time.LocalDateTime.now());
+        ls.setViewerCount(0);
+        livestreamRepo.save(ls);
+        eventPublisher.publishStreamEnded(livestreamId);
+    }
+
+    @Override
+    @Transactional
+    public void leaveStream(Long livestreamId) {
+        User viewer = requireCurrentUser();
+        Livestream ls = requireLivestream(livestreamId);
+
+        // Record left_at timestamp on the participant row
+        participantRepo
+                .findFirstByLivestreamAndUserOrderByIdDesc(ls, viewer)
+                .ifPresent(p -> {
+                    p.setLeftAt(java.time.LocalDateTime.now());
+                    participantRepo.save(p);
+                });
+
+        // Only decrement if they were counted as a viewer (not the host)
+        if (!ls.getHost().getId().equals(viewer.getId()) && ls.getStatus() == LivestreamStatus.LIVE) {
+            decrementViewerCount(livestreamId);
+        }
+    }
+
+    @Override
+    @Transactional
+    public void handleLivekitWebhook(String authHeader, String rawBody) {
+        try {
+            WebhookReceiver receiver = new WebhookReceiver(
+                    liveKitTokenService.getApiKey(),
+                    liveKitTokenService.getApiSecret()
+            );
+            LivekitWebhook.WebhookEvent event = receiver.receive(rawBody, authHeader);
+
+            String eventType = event.getEvent();
+            String roomName = event.hasRoom() ? event.getRoom().getName() : null;
+
+            log.info("LiveKit webhook: event={} room={}", eventType, roomName);
+
+            if (roomName == null || !roomName.startsWith("live_")) {
+                return;
+            }
+
+            Long livestreamId = parseWebhookLivestreamId(roomName);
+            if (livestreamId == null) {
+                log.warn("Could not parse livestreamId from room name: {}", roomName);
+                return;
+            }
+
+            switch (eventType) {
+                case "participant_joined" -> {
+                    String identity = event.hasParticipant()
+                            ? event.getParticipant().getIdentity() : "";
+                    if (!identity.contains("_host_")) {
+                        incrementViewerCount(livestreamId);
+                    }
+                }
+                case "participant_left" -> {
+                    String identity = event.hasParticipant()
+                            ? event.getParticipant().getIdentity() : "";
+                    if (!identity.contains("_host_")) {
+                        decrementViewerCount(livestreamId);
+                    }
+                }
+                case "room_finished" -> handleRoomFinished(livestreamId);
+                default -> log.debug("Unhandled LiveKit event: {}", eventType);
+            }
+        } catch (Exception e) {
+            log.error("Failed to process LiveKit webhook in service", e);
+        }
+    }
+
+    private Long parseWebhookLivestreamId(String roomName) {
+        try {
+            String[] parts = roomName.split("_");
+            if (parts.length >= 3) {
+                return Long.parseLong(parts[parts.length - 1]);
+            }
+        } catch (NumberFormatException e) {
+            log.warn("Malformed webhook room name: {}", roomName);
+        }
+        return null;
     }
 }

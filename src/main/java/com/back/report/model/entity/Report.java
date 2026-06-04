@@ -1,6 +1,7 @@
 package com.back.report.model.entity;
 
 import com.back.common.model.entity.BaseEntity;
+import com.back.report.model.enums.ReportResolutionAction;
 import com.back.report.model.enums.ReportStatus;
 import com.back.report.model.enums.ReportTargetType;
 import com.back.user.model.entity.User;
@@ -45,5 +46,13 @@ public class Report extends BaseEntity {
     private ReportStatus status;
 
     private Long reviewedBy;
+
+    @Column(length = 1000)
+    private String reviewNote;
+
+    @Enumerated(EnumType.STRING)
+    @Column(length = 50)
+    private ReportResolutionAction resolutionAction;
+
     private LocalDateTime reviewedAt;
 }

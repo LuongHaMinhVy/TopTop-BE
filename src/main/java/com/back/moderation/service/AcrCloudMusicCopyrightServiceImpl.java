@@ -50,26 +50,26 @@ public class AcrCloudMusicCopyrightServiceImpl implements IMusicCopyrightService
     public MusicCopyrightResult check(Video video) {
         Sound sound = video.getSound();
 
-        // 1. If it's a platform-licensed public music, approve immediately
+        // 1. If it's a platform public music, record it as recognized immediately.
         if (sound != null && sound.getType() != SoundType.ORIGINAL
                 && Boolean.TRUE.equals(sound.getIsActive())
                 && Boolean.TRUE.equals(sound.getIsPublic())) {
             return new MusicCopyrightResult(
                     MusicCopyrightStatus.APPROVED,
-                    "PLATFORM_SOUND_LICENSED",
-                    "Âm thanh được chọn từ thư viện công khai của hệ thống."
+                    "PLATFORM_SOUND_RECOGNIZED",
+                    sound.getTitle()
             );
         }
 
-        // 2. Perform ACRCloud check for original sound or embedded audio
-        log.info("Starting ACRCloud copyright check for video ID: {}", video.getId());
+        // 2. Perform ACRCloud recognition for original sound or embedded audio.
+        log.info("Starting ACRCloud music recognition for video ID: {}", video.getId());
 
         if (!isConfigured()) {
-            log.warn("ACRCloud is enabled but missing access key, secret, or host. Marking video {} for review.", video.getId());
+            log.warn("ACRCloud is enabled but missing access key, secret, or host. Skipping music recognition for video {}.", video.getId());
             return new MusicCopyrightResult(
-                    MusicCopyrightStatus.NEED_REVIEW,
+                    MusicCopyrightStatus.APPROVED,
                     "ACRCLOUD_NOT_CONFIGURED",
-                    "Cấu hình ACRCloud chưa đầy đủ. Cần kiểm tra bản quyền thủ công."
+                    null
             );
         }
 
@@ -86,9 +86,9 @@ public class AcrCloudMusicCopyrightServiceImpl implements IMusicCopyrightService
             } catch (Exception ex) {
                 log.error("Failed to download video file: {}", ex.getMessage());
                 return new MusicCopyrightResult(
-                        MusicCopyrightStatus.NEED_REVIEW,
+                        MusicCopyrightStatus.APPROVED,
                         "ACRCLOUD_DOWNLOAD_ERROR",
-                        "Không thể tải file video để kiểm tra bản quyền: " + ex.getMessage()
+                        null
                 );
             }
         }
@@ -100,9 +100,9 @@ public class AcrCloudMusicCopyrightServiceImpl implements IMusicCopyrightService
         } catch (Exception e) {
             log.error("Error during ACRCloud recognition: {}", e.getMessage(), e);
             return new MusicCopyrightResult(
-                    MusicCopyrightStatus.NEED_REVIEW,
+                    MusicCopyrightStatus.APPROVED,
                     "ACRCLOUD_CHECK_ERROR",
-                    "Lỗi kết nối hoặc nhận diện âm thanh qua ACRCloud: " + e.getMessage()
+                    null
             );
         }
     }
@@ -288,17 +288,17 @@ public class AcrCloudMusicCopyrightServiceImpl implements IMusicCopyrightService
                 // No result matched
                 return new MusicCopyrightResult(
                         MusicCopyrightStatus.APPROVED,
-                        "NO_COPYRIGHT_MATCHED",
-                        "Không phát hiện âm thanh vi phạm bản quyền."
+                        "NO_MUSIC_RECOGNIZED",
+                        null
                 );
             }
 
             if (code != 0) {
                 log.warn("ACRCloud returned error code {}: {}", code, msg);
                 return new MusicCopyrightResult(
-                        MusicCopyrightStatus.NEED_REVIEW,
+                        MusicCopyrightStatus.APPROVED,
                         "ACRCLOUD_API_ERROR",
-                        "ACRCloud trả về mã lỗi: " + code + " - " + msg
+                        null
                 );
             }
 
@@ -324,34 +324,26 @@ public class AcrCloudMusicCopyrightServiceImpl implements IMusicCopyrightService
 
                 log.info("ACRCloud matched music: {} - {} (score={})", title, artistStr, score);
 
-                if (score >= 70) {
-                    return new MusicCopyrightResult(
-                            MusicCopyrightStatus.REJECTED,
-                            "COPYRIGHT_MATCHED",
-                            "Phát hiện âm thanh bản quyền: " + title + " - " + artistStr + " (Độ khớp: " + score + "%)"
-                    );
-                } else {
-                    return new MusicCopyrightResult(
-                            MusicCopyrightStatus.NEED_REVIEW,
-                            "COPYRIGHT_MATCHED_LOW_SCORE",
-                            "Phát hiện âm thanh nghi vấn bản quyền: " + title + " - " + artistStr + " (Độ khớp: " + score + "%)"
-                    );
-                }
+                return new MusicCopyrightResult(
+                        MusicCopyrightStatus.APPROVED,
+                        "MUSIC_RECOGNIZED",
+                        title + " - " + artistStr + " (" + score + "%)"
+                );
             }
 
             // Code is 0 but music list is empty
             return new MusicCopyrightResult(
                     MusicCopyrightStatus.APPROVED,
-                    "NO_COPYRIGHT_MATCHED",
-                    "Không phát hiện âm thanh vi phạm bản quyền."
+                    "NO_MUSIC_RECOGNIZED",
+                    null
             );
 
         } catch (Exception e) {
             log.error("Failed to parse ACRCloud response JSON: {}", e.getMessage(), e);
             return new MusicCopyrightResult(
-                    MusicCopyrightStatus.NEED_REVIEW,
+                    MusicCopyrightStatus.APPROVED,
                     "ACRCLOUD_PARSE_ERROR",
-                    "Lỗi phân tích kết quả bản quyền âm thanh."
+                    null
             );
         }
     }

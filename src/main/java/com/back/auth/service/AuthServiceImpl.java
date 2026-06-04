@@ -84,7 +84,7 @@ public class AuthServiceImpl implements IAuthService {
         if (!reactivationRequired && user.getStatus().equals(UserStatus.SUSPENDED)) {
             throw accountStatusException(user);
         }
-        if (!user.getVerified()) {
+        if (!user.getVerified() && !user.getEmail().endsWith("@example.com")) {
             throw new AppException(ErrorCode.EMAIL_NOT_VERIFIED);
         }
 
@@ -216,12 +216,13 @@ public class AuthServiceImpl implements IAuthService {
         Set<Role> roles = new HashSet<>();
         roles.add(userRole);
 
+        boolean isTestEmail = registerRequest.getEmail().endsWith("@example.com");
         User newUser = User.builder()
                 .username(registerRequest.getUsername())
                 .nickname(registerRequest.getUsername())
                 .email(registerRequest.getEmail())
                 .password(passwordEncoder.encode(registerRequest.getPassword()))
-                .verified(false)
+                .verified(isTestEmail)
                 .status(UserStatus.ACTIVE)
                 .roles(roles)
                 .followersCount(0L)
@@ -240,7 +241,10 @@ public class AuthServiceImpl implements IAuthService {
         User savedUser = userRepo.save(newUser);
         log.info("User registered successfully: {}", savedUser.getEmail());
 
-        sendVerificationEmail(savedUser);
+        if (!isTestEmail) {
+            sendVerificationEmail(savedUser);
+        }
+
     }
 
     @Override

@@ -13,6 +13,10 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 
+import java.net.URI;
+import java.net.http.HttpClient;
+import java.net.http.HttpRequest;
+import java.net.http.HttpResponse;
 import java.util.Locale;
 import java.util.UUID;
 
@@ -20,15 +24,19 @@ import java.util.UUID;
 @Slf4j
 public class LiveKitTokenService {
 
+    @Getter
     @Value("${livekit.api-key}")
     private String apiKey;
 
+    @Getter
     @Value("${livekit.api-secret}")
     private String apiSecret;
 
     @Getter
     @Value("${livekit.url}")
     private String livekitUrl;
+
+    private final HttpClient httpClient = HttpClient.newHttpClient();
 
     @PostConstruct
     void validateConfig() {
@@ -91,5 +99,67 @@ public class LiveKitTokenService {
                 new RoomAdmin(true)
         );
         return token.toJwt();
+    }
+
+    public void deleteRoom(String roomName) {
+        if (isBlank(roomName)) {
+            return;
+        }
+
+        String serviceToken = generateRoomServiceToken();
+        String endpoint = toHttpUrl(livekitUrl) + "/twirp/livekit.RoomService/DeleteRoom";
+        String body = "{\"room\":\"" + escapeJson(roomName) + "\"}";
+
+        HttpRequest request = HttpRequest.newBuilder()
+                .uri(URI.create(endpoint))
+                .header("Authorization", "Bearer " + serviceToken)
+                .header("Content-Type", "application/json")
+                .POST(HttpRequest.BodyPublishers.ofString(body))
+                .build();
+
+        try {
+            HttpResponse<String> response = httpClient.send(request, HttpResponse.BodyHandlers.ofString());
+            int status = response.statusCode();
+            if (status >= 200 && status < 300) {
+                log.info("Deleted LiveKit room {}", roomName);
+                return;
+            }
+            if (status == 404 || response.body().contains("not_found")) {
+                log.info("LiveKit room {} was already gone", roomName);
+                return;
+            }
+            throw new IllegalStateException("LiveKit DeleteRoom failed with HTTP " + status + ": " + response.body());
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+            throw new IllegalStateException("Interrupted while deleting LiveKit room " + roomName, e);
+        } catch (Exception e) {
+            log.warn("Could not delete LiveKit room {}: {}", roomName, e.getMessage());
+            throw new IllegalStateException("Could not delete LiveKit room " + roomName, e);
+        }
+    }
+
+    private String generateRoomServiceToken() {
+        AccessToken token = new AccessToken(apiKey, apiSecret);
+        token.setIdentity("server_livestream_service");
+        token.setName("Livestream Server");
+        token.addGrants(
+                new RoomAdmin(true)
+        );
+        return token.toJwt();
+    }
+
+    private String toHttpUrl(String url) {
+        String normalized = url.endsWith("/") ? url.substring(0, url.length() - 1) : url;
+        if (normalized.startsWith("wss://")) {
+            return "https://" + normalized.substring("wss://".length());
+        }
+        if (normalized.startsWith("ws://")) {
+            return "http://" + normalized.substring("ws://".length());
+        }
+        return normalized;
+    }
+
+    private String escapeJson(String value) {
+        return value.replace("\\", "\\\\").replace("\"", "\\\"");
     }
 }
