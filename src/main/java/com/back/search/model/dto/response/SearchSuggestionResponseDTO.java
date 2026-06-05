@@ -9,6 +9,7 @@ import java.util.List;
 @Builder
 public class SearchSuggestionResponseDTO {
     private List<String> keywords;
+    private String didYouMean;
     private List<SearchUserResponseDTO> users;
     private List<SearchHashtagResponseDTO> hashtags;
     private List<RelatedSearchResponseDTO> relatedSearches;

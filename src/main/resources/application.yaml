@@ -84,6 +84,7 @@ jwt:
 frontend:
   urls: ${FRONTEND_URLS:${CORS_ALLOWED_ORIGINS:http://localhost:3000,http://localhost:3001,http://localhost:3002,http://127.0.0.1:3000,http://127.0.0.1:3001,http://127.0.0.1:3002,http://26.87.198.178:3000,http://26.87.198.178:3001,http://26.87.198.178:3002}}
 
+
 springdoc:
   api-docs:
     path: /api-docs
@@ -134,3 +135,30 @@ livekit:
   url: ${LIVEKIT_URL}
   api-key: ${LIVEKIT_API_KEY}
   api-secret: ${LIVEKIT_API_SECRET}
+
+payment:
+  default-currency: VND
+  success-path: /payment/success
+  cancel-path: /payment/cancel
+  paypal-success-path: /payment/paypal/success
+
+stripe:
+  secret-key: ${STRIPE_SECRET_KEY}
+  webhook-secret: ${STRIPE_WEBHOOK_SECRET}
+  currency: vnd
+
+paypal:
+  mode: ${PAYPAL_MODE:sandbox}
+  client-id: ${PAYPAL_CLIENT_ID}
+  client-secret: ${PAYPAL_CLIENT_SECRET}
+  base-url: ${PAYPAL_BASE_URL:https://api-m.sandbox.paypal.com}
+  currency: USD
+
+search:
+  opensearch:
+    enabled: ${OPENSEARCH_ENABLED:false}
+    index-on-startup: ${OPENSEARCH_INDEX_ON_STARTUP:false}
+    url: ${OPENSEARCH_URL:http://localhost:9200}
+    index-name: ${OPENSEARCH_INDEX_NAME:toptop_search}
+    username: ${OPENSEARCH_USERNAME:}
+    password: ${OPENSEARCH_PASSWORD:}

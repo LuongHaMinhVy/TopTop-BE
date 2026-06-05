@@ -232,6 +232,27 @@ public interface IVideoRepository extends JpaRepository<Video, Long> {
     @EntityGraph(attributePaths = {"user", "sound"})
     @Query("""
             SELECT v FROM Video v
+            WHERE v.id IN :ids
+              AND v.deletedAt IS NULL
+              AND v.user.deletedAt IS NULL
+              AND v.visibility = com.back.video.model.enums.VideoVisibility.PUBLIC
+              AND v.moderationStatus = com.back.moderation.model.enums.VideoModerationStatus.APPROVED
+            """)
+    List<Video> findPublicSearchVideosByIds(@Param("ids") List<Long> ids);
+
+    @EntityGraph(attributePaths = {"user", "sound"})
+    @Query("""
+            SELECT v FROM Video v
+            WHERE v.deletedAt IS NULL
+              AND v.user.deletedAt IS NULL
+              AND v.visibility = com.back.video.model.enums.VideoVisibility.PUBLIC
+              AND v.moderationStatus = com.back.moderation.model.enums.VideoModerationStatus.APPROVED
+            """)
+    List<Video> findSearchIndexVideos();
+
+    @EntityGraph(attributePaths = {"user", "sound"})
+    @Query("""
+            SELECT v FROM Video v
             WHERE v.deletedAt IS NULL
               AND v.user.deletedAt IS NULL
               AND v.sound.id = :soundId

@@ -92,6 +92,29 @@ public interface IUserRepo extends JpaRepository<User, Long>{
 
     @Query("""
             SELECT u FROM User u
+            WHERE u.id IN :ids
+              AND u.deletedAt IS NULL
+              AND LOWER(u.username) <> 'admin'
+              AND NOT EXISTS (
+                  SELECT r.id FROM u.roles r
+                  WHERE r.name = com.back.user.model.enums.RoleName.ROLE_ADMIN
+              )
+            """)
+    List<User> findPublicSearchUsersByIds(@Param("ids") List<Long> ids);
+
+    @Query("""
+            SELECT u FROM User u
+            WHERE u.deletedAt IS NULL
+              AND LOWER(u.username) <> 'admin'
+              AND NOT EXISTS (
+                  SELECT r.id FROM u.roles r
+                  WHERE r.name = com.back.user.model.enums.RoleName.ROLE_ADMIN
+              )
+            """)
+    List<User> findSearchIndexUsers();
+
+    @Query("""
+            SELECT u FROM User u
             WHERE (:viewerId IS NULL OR u.id <> :viewerId)
               AND u.deletedAt IS NULL
               AND LOWER(u.username) <> 'admin'

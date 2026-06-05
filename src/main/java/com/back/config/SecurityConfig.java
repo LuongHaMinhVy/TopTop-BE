@@ -148,6 +148,18 @@ public class SecurityConfig {
                         .requestMatchers("/api/v1/lives/**")
                         .hasAnyAuthority(RoleName.ROLE_USER.name(), RoleName.ROLE_ADMIN.name())
 
+                        // ── Shop endpoints ────────────────────────────────────────
+                        .requestMatchers(HttpMethod.GET, "/api/v1/shops/slug/*").permitAll()
+                        .requestMatchers(HttpMethod.GET, "/api/v1/shops/*").permitAll()
+                        .requestMatchers(HttpMethod.GET, "/api/v1/products/public").permitAll()
+                        .requestMatchers(HttpMethod.GET, "/api/v1/products/public/**").permitAll()
+                        .requestMatchers(HttpMethod.GET, "/api/v1/products/*").permitAll()
+                        .requestMatchers(HttpMethod.GET, "/api/v1/products/*/reviews").permitAll()
+                        .requestMatchers(HttpMethod.GET, "/api/v1/shop-links/video/*").permitAll()
+                        .requestMatchers(HttpMethod.GET, "/api/v1/shop-links/livestream/*").permitAll()
+                        .requestMatchers(HttpMethod.GET, "/api/v1/categories").permitAll()
+                        .requestMatchers(HttpMethod.GET, "/api/v1/categories/**").permitAll()
+
                         .anyRequest().authenticated()
                 )
 
