@@ -174,6 +174,18 @@ public class UserServiceImpl implements IUserService {
         if (request.getAllowMessageFromEveryone() != null) {
             currentUser.setAllowMessageFromEveryone(request.getAllowMessageFromEveryone());
         }
+        if (request.getShowPosts() != null) {
+            currentUser.setShowPosts(request.getShowPosts());
+        }
+        if (request.getShowReposts() != null) {
+            currentUser.setShowReposts(request.getShowReposts());
+        }
+        if (request.getShowLikedVideos() != null) {
+            currentUser.setShowLikedVideos(request.getShowLikedVideos());
+        }
+        if (request.getShowFavorites() != null) {
+            currentUser.setShowFavorites(request.getShowFavorites());
+        }
 
         return userInfoMapper.buildUserInfo(userRepo.save(currentUser));
     }

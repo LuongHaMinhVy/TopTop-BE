@@ -36,6 +36,7 @@ public interface IVideoService {
     VideoResponseDTO getVideoByUsernameAndId(String username, Long videoId);
     VideoResponseDTO updateVideo(Long id, VideoUploadRequestDTO requestDTO);
     Page<VideoResponseDTO> getLikedVideos(Pageable pageable);
+    Page<VideoResponseDTO> getLikedVideosByUsername(String username, Pageable pageable);
     Page<VideoResponseDTO> getRepostedVideosByUsername(String username, Pageable pageable);
     Page<VideoResponseDTO> getFollowingFeed(Pageable pageable);
     Page<VideoResponseDTO> getFriendsFeed(Pageable pageable);

@@ -119,6 +119,22 @@ public class User extends BaseEntity {
     private Boolean allowMessageFromEveryone = false;
 
     @Builder.Default
+    @Column(nullable = false, columnDefinition = "boolean default true")
+    private Boolean showPosts = true;
+
+    @Builder.Default
+    @Column(nullable = false, columnDefinition = "boolean default true")
+    private Boolean showReposts = true;
+
+    @Builder.Default
+    @Column(nullable = false, columnDefinition = "boolean default false")
+    private Boolean showLikedVideos = false;
+
+    @Builder.Default
+    @Column(nullable = false, columnDefinition = "boolean default false")
+    private Boolean showFavorites = false;
+
+    @Builder.Default
     @Column(nullable = false)
     private Boolean onboarded = true;
 

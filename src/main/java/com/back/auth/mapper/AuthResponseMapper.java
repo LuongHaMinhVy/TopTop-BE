@@ -52,6 +52,10 @@ public class AuthResponseMapper {
                         .allowStitch(user.getAllowStitch())
                         .allowDownload(user.getAllowDownload())
                         .allowMessageFromEveryone(user.getAllowMessageFromEveryone())
+                        .showPosts(user.getShowPosts())
+                        .showReposts(user.getShowReposts())
+                        .showLikedVideos(user.getShowLikedVideos())
+                        .showFavorites(user.getShowFavorites())
                         .build())
                 .build();
 

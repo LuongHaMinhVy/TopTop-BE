@@ -1012,6 +1012,21 @@ public class VideoServiceImpl implements IVideoService {
     }
 
     @Override
+    public Page<VideoResponseDTO> getLikedVideosByUsername(String username, Pageable pageable) {
+        User targetUser = userRepo.findPublicUserByUsername(username)
+                .orElseThrow(() -> new AppException(ErrorCode.USER_NOT_FOUND));
+
+        User currentUser = getCurrentUser();
+        boolean isOwner = currentUser != null && targetUser.getId().equals(currentUser.getId());
+        if (!isOwner && !Boolean.TRUE.equals(targetUser.getShowLikedVideos())) {
+            throw new AppException(ErrorCode.FORBIDDEN);
+        }
+
+        return videoRepository.findLikedVideosByUserId(targetUser.getId(), pageable)
+                .map(this::mapToResponseDTO);
+    }
+
+    @Override
     public Page<VideoResponseDTO> getRepostedVideosByUsername(String username, Pageable pageable) {
         userRepo.findPublicUserByUsername(username)
                 .orElseThrow(() -> new AppException(ErrorCode.USER_NOT_FOUND));

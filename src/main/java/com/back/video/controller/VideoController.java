@@ -295,4 +295,21 @@ public class VideoController {
                 .timestamp(LocalDateTime.now())
                 .build());
     }
+
+    @GetMapping("/users/{username}/liked")
+    public ResponseEntity<ApiResponse<List<VideoResponseDTO>>> getLikedVideosByUsername(
+            @PathVariable String username,
+            @RequestParam(defaultValue = "0") int page,
+            @RequestParam(defaultValue = "10") int size) {
+        Pageable pageable = PageRequest.of(page, size);
+        Page<VideoResponseDTO> videoPage = videoService.getLikedVideosByUsername(username, pageable);
+
+        return ResponseEntity.ok(ApiResponse.<List<VideoResponseDTO>>builder()
+                .message(Translator.toLocale("video.liked_list.success", "Liked videos retrieved successfully"))
+                .data(videoPage.getContent())
+                .meta(Meta.from(videoPage))
+                .status(HttpStatus.OK.value())
+                .timestamp(LocalDateTime.now())
+                .build());
+    }
 }
