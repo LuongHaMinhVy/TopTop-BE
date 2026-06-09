@@ -21,7 +21,9 @@ public class RateLimitAspect {
 
     @Around("@annotation(rateLimit)")
     public Object limit(ProceedingJoinPoint joinPoint, RateLimit rateLimit) throws Throwable {
-        String key = "rate_limit:" + getClientIp();
+        String className = joinPoint.getSignature().getDeclaringTypeName();
+        String methodName = joinPoint.getSignature().getName();
+        String key = "rate_limit:" + className + ":" + methodName + ":" + getClientIp();
 
         Long count = redisTemplate.opsForValue().increment(key);
 

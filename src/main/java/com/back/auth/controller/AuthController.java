@@ -79,6 +79,7 @@ public class AuthController{
     }
 
     @PostMapping("/resend-verification")
+    @RateLimit(limit = 3, durationInSeconds = 60)
     public ResponseEntity<ApiResponse<Void>> resendVerification(@RequestParam String email){
         authService.resendVerification(email);
         return ResponseEntity.ok(ApiResponse.<Void>builder()
@@ -89,6 +90,7 @@ public class AuthController{
     }
 
     @PostMapping("/forgot-password")
+    @RateLimit(limit = 3, durationInSeconds = 60)
     public ResponseEntity<ApiResponse<Void>> forgotPassword(@RequestParam String email){
         authService.forgotPassword(email);
         return ResponseEntity.ok(ApiResponse.<Void>builder()
@@ -99,6 +101,7 @@ public class AuthController{
     }
 
     @PostMapping("/reset-password")
+    @RateLimit(limit = 10, durationInSeconds = 60)
     public ResponseEntity<ApiResponse<Void>> resetPassword(@Valid @RequestBody ResetPasswordRequest request){
         authService.resetPassword(request.getToken(), request.getNewPassword());
         return ResponseEntity.ok(ApiResponse.<Void>builder()
