@@ -13,6 +13,7 @@ public class PaymentResponse {
     private Long orderId;
     private String provider;
     private String providerTransactionId;
+    private String redirectUrl;
     private BigDecimal amount;
     private String currency;
     private String status;

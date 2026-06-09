@@ -14,6 +14,7 @@ public interface IOrderService {
     Page<OrderResponse> getOrdersForAdmin(Pageable pageable);
     OrderResponse getOrderForAdmin(Long id);
     OrderResponse updateOrderStatus(Long orderId, String status);
-    OrderResponse payOrder(Long orderId, String paymentProvider, String transactionId);
+    PaymentResponse payOrder(Long orderId, String paymentProvider);
+    OrderResponse completePayment(Long orderId, String paymentProvider, String providerReference);
     OrderResponse cancelOrder(Long orderId);
 }

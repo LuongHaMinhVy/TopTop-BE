@@ -24,6 +24,9 @@ public class TextContentModerationServiceImpl implements ITextContentModerationS
 
     @Override
     public void assertAllowed(String targetType, String text, Long actorUserId, String fieldName) {
+        if ("MESSAGE".equals(targetType)) {
+            return;
+        }
         String normalized = text == null ? "" : text.trim();
         if (normalized.isBlank()) {
             return;

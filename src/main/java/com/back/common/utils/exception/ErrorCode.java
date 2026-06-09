@@ -59,6 +59,7 @@ public enum ErrorCode {
     CANNOT_FOLLOW_SELF(HttpStatus.BAD_REQUEST, "You cannot follow yourself"),
     CANNOT_BLOCK_SELF(HttpStatus.BAD_REQUEST, "You cannot block yourself"),
     CANNOT_REPOST_SELF(HttpStatus.BAD_REQUEST, "You cannot repost your own video"),
+    CANNOT_BUY_OWN_SHOP_PRODUCT(HttpStatus.BAD_REQUEST, "You cannot buy products from your own shop"),
     CANNOT_MARK_OWN_VIDEO_NOT_INTERESTED(HttpStatus.BAD_REQUEST, "You cannot mark your own video as not interested"),
     CANNOT_MARK_INTERESTED_VIDEO_NOT_INTERESTED(HttpStatus.BAD_REQUEST, "Liked or saved videos cannot be marked as not interested"),
     USER_BLOCKED(HttpStatus.FORBIDDEN, "Video is unavailable"),

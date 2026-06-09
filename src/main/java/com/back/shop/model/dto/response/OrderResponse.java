@@ -19,6 +19,11 @@ public class OrderResponse {
     private BigDecimal shippingFee;
     private BigDecimal discountAmount;
     private BigDecimal totalAmount;
+    private BigDecimal commissionBaseAmount;
+    private BigDecimal shopPayoutRate;
+    private BigDecimal shopPayoutAmount;
+    private BigDecimal platformFeeAmount;
+    private String commissionTier;
     private String currency;
     private String status;
     private String paymentStatus;

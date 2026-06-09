@@ -87,6 +87,7 @@ public class CartServiceImpl implements ICartService {
         if (shop.getStatus() != ShopStatus.ACTIVE || shop.getModerationStatus() != ShopModerationStatus.APPROVED) {
             throw new AppException(ErrorCode.BAD_REQUEST);
         }
+        ensureShopIsNotOwnedByUser(shop, user);
 
         ProductVariant variant = null;
         if (request.getVariantId() != null) {
@@ -220,6 +221,8 @@ public class CartServiceImpl implements ICartService {
                     .build();
         }
 
+        ensureCartItemsAreNotFromOwnShop(selectedItems, user);
+
         List<CartItemResponse> responses = selectedItems.stream()
                 .map(this::mapItem)
                 .toList();
@@ -278,6 +281,22 @@ public class CartServiceImpl implements ICartService {
                 .userId(cart.getUserId())
                 .items(itemResponses)
                 .build();
+    }
+
+    private void ensureCartItemsAreNotFromOwnShop(List<CartItem> items, User user) {
+        for (CartItem item : items) {
+            Product product = productRepository.findById(item.getProductId())
+                    .orElseThrow(() -> new AppException(ErrorCode.BAD_REQUEST));
+            Shop shop = shopRepository.findById(product.getShopId())
+                    .orElseThrow(() -> new AppException(ErrorCode.BAD_REQUEST));
+            ensureShopIsNotOwnedByUser(shop, user);
+        }
+    }
+
+    private void ensureShopIsNotOwnedByUser(Shop shop, User user) {
+        if (shop.getOwnerId().equals(user.getId())) {
+            throw new AppException(ErrorCode.CANNOT_BUY_OWN_SHOP_PRODUCT);
+        }
     }
 
     private CartItemResponse mapItem(CartItem item) {

@@ -5,6 +5,7 @@ import com.back.common.model.dto.response.Meta;
 import com.back.common.utils.Translator;
 import com.back.shop.model.dto.request.PlaceOrderRequest;
 import com.back.shop.model.dto.response.OrderResponse;
+import com.back.shop.model.dto.response.PaymentResponse;
 import com.back.shop.service.IOrderService;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
@@ -91,12 +92,26 @@ public class OrderController {
     }
 
     @PostMapping("/{id}/pay")
-    public ResponseEntity<ApiResponse<OrderResponse>> payOrder(
+    public ResponseEntity<ApiResponse<PaymentResponse>> payOrder(
             @PathVariable Long id,
             @RequestBody Map<String, String> payload) {
         String provider = payload.getOrDefault("provider", "COD");
-        String transactionId = payload.get("transactionId");
-        OrderResponse data = orderService.payOrder(id, provider, transactionId);
+        PaymentResponse data = orderService.payOrder(id, provider);
+        return ResponseEntity.ok(ApiResponse.<PaymentResponse>builder()
+                .message(Translator.toLocale("order.payment.init.success", "Payment initialized successfully"))
+                .data(data)
+                .status(200)
+                .timestamp(LocalDateTime.now())
+                .build());
+    }
+
+    @PostMapping("/{id}/pay/complete")
+    public ResponseEntity<ApiResponse<OrderResponse>> completePayment(
+            @PathVariable Long id,
+            @RequestBody Map<String, String> payload) {
+        String provider = payload.getOrDefault("provider", "");
+        String providerReference = payload.getOrDefault("providerReference", "");
+        OrderResponse data = orderService.completePayment(id, provider, providerReference);
         return ResponseEntity.ok(ApiResponse.<OrderResponse>builder()
                 .message(Translator.toLocale("order.payment.success", "Order paid successfully"))
                 .data(data)

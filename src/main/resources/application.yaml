@@ -143,16 +143,17 @@ payment:
   paypal-success-path: /payment/paypal/success
 
 stripe:
-  secret-key: ${STRIPE_SECRET_KEY}
-  webhook-secret: ${STRIPE_WEBHOOK_SECRET}
+  secret-key: ${STRIPE_SECRET_KEY:}
+  webhook-secret: ${STRIPE_WEBHOOK_SECRET:}
   currency: vnd
 
 paypal:
   mode: ${PAYPAL_MODE:sandbox}
-  client-id: ${PAYPAL_CLIENT_ID}
-  client-secret: ${PAYPAL_CLIENT_SECRET}
+  client-id: ${PAYPAL_CLIENT_ID:}
+  client-secret: ${PAYPAL_CLIENT_SECRET:}
   base-url: ${PAYPAL_BASE_URL:https://api-m.sandbox.paypal.com}
   currency: USD
+  vnd-to-usd-rate: ${PAYPAL_VND_TO_USD_RATE:25000}
 
 search:
   opensearch:

@@ -1,10 +1,12 @@
 package com.back.shop.service.impl;
 
+import com.back.config.FrontendProperties;
 import com.back.common.utils.exception.AppException;
 import com.back.common.utils.exception.ErrorCode;
 import com.back.shop.model.dto.request.PlaceOrderRequest;
 import com.back.shop.model.dto.response.OrderItemResponse;
 import com.back.shop.model.dto.response.OrderResponse;
+import com.back.shop.model.dto.response.PaymentResponse;
 import com.back.shop.model.entity.*;
 import com.back.shop.model.enums.*;
 import com.back.shop.repo.*;
@@ -12,15 +14,26 @@ import com.back.shop.service.IOrderService;
 import com.back.user.model.entity.User;
 import com.back.user.repo.IUserRepo;
 import lombok.RequiredArgsConstructor;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
+import org.springframework.http.HttpEntity;
+import org.springframework.http.HttpHeaders;
+import org.springframework.http.HttpMethod;
+import org.springframework.http.MediaType;
+import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.Authentication;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.security.oauth2.client.authentication.OAuth2AuthenticationToken;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.util.LinkedMultiValueMap;
+import org.springframework.util.MultiValueMap;
+import org.springframework.web.client.RestTemplate;
+import org.springframework.web.util.UriComponentsBuilder;
 
 import java.math.BigDecimal;
+import java.math.RoundingMode;
 import java.time.LocalDateTime;
 import java.util.*;
 import java.util.stream.Collectors;
@@ -39,6 +52,29 @@ public class OrderServiceImpl implements IOrderService {
     private final ProductMediaRepository productMediaRepository;
     private final ShopRepository shopRepository;
     private final IUserRepo userRepo;
+    private final FrontendProperties frontendProperties;
+    private final RestTemplate restTemplate;
+
+    @Value("${stripe.secret-key:}")
+    private String stripeSecretKey;
+
+    @Value("${stripe.currency:vnd}")
+    private String stripeCurrency;
+
+    @Value("${paypal.client-id:}")
+    private String paypalClientId;
+
+    @Value("${paypal.client-secret:}")
+    private String paypalClientSecret;
+
+    @Value("${paypal.base-url:https://api-m.sandbox.paypal.com}")
+    private String paypalBaseUrl;
+
+    @Value("${paypal.currency:USD}")
+    private String paypalCurrency;
+
+    @Value("${paypal.vnd-to-usd-rate:25000}")
+    private BigDecimal paypalVndToUsdRate;
 
     private User getCurrentUser() {
         Authentication authentication = SecurityContextHolder.getContext().getAuthentication();
@@ -91,6 +127,7 @@ public class OrderServiceImpl implements IOrderService {
 
             Shop shop = shopRepository.findById(shopId)
                     .orElseThrow(() -> new AppException(ErrorCode.BAD_REQUEST));
+            ensureShopIsNotOwnedByBuyer(shop, buyer);
 
             BigDecimal subtotal = BigDecimal.ZERO;
             List<OrderItem> orderItemsToSave = new ArrayList<>();
@@ -125,7 +162,7 @@ public class OrderServiceImpl implements IOrderService {
                 String mediaUrl = null;
                 List<ProductMedia> mediaList = productMediaRepository.findAllByProductIdOrderBySortOrderAsc(product.getId());
                 if (!mediaList.isEmpty()) {
-                    mediaUrl = mediaList.get(0).getUrl();
+                    mediaUrl = mediaList.getFirst().getUrl();
                 }
 
                 orderItemsToSave.add(OrderItem.builder()
@@ -143,7 +180,7 @@ public class OrderServiceImpl implements IOrderService {
             BigDecimal shippingFee = BigDecimal.valueOf(30000L); // 30,000 VND flat per shop order
             BigDecimal total = subtotal.add(shippingFee);
 
-            String orderCode = "TT" + System.currentTimeMillis() + "" + (new Random().nextInt(900) + 100);
+            String orderCode = "TT" + System.currentTimeMillis() + (new Random().nextInt(900) + 100);
 
             Order order = Order.builder()
                     .orderCode(orderCode)
@@ -155,7 +192,7 @@ public class OrderServiceImpl implements IOrderService {
                     .totalAmount(total)
                     .currency("VND")
                     .status("COD".equalsIgnoreCase(request.getPaymentProvider()) ? OrderStatus.SELLER_CONFIRMING : OrderStatus.PENDING_PAYMENT)
-                    .paymentStatus("COD".equalsIgnoreCase(request.getPaymentProvider()) ? PaymentStatus.UNPAID : PaymentStatus.UNPAID)
+                    .paymentStatus(PaymentStatus.UNPAID)
                     .shippingStatus(ShippingStatus.NOT_SHIPPED)
                     .receiverName(request.getReceiverName())
                     .receiverPhone(request.getReceiverPhone())
@@ -280,26 +317,33 @@ public class OrderServiceImpl implements IOrderService {
 
         OrderStatus newStatus = OrderStatus.valueOf(status);
 
-        // Simple validation state transition
-        if (newStatus == OrderStatus.PACKING) {
-            order.setShippingStatus(ShippingStatus.PREPARING);
-        } else if (newStatus == OrderStatus.SHIPPING) {
-            order.setShippingStatus(ShippingStatus.SHIPPED);
-        } else if (newStatus == OrderStatus.DELIVERED) {
-            order.setShippingStatus(ShippingStatus.DELIVERED);
-        } else if (newStatus == OrderStatus.COMPLETED) {
-            order.setShippingStatus(ShippingStatus.DELIVERED);
-            if (order.getPaymentStatus() == PaymentStatus.UNPAID) {
-                order.setPaymentStatus(PaymentStatus.PAID);
-                Payment payment = paymentRepository.findByOrderId(order.getId()).orElse(null);
-                if (payment != null) {
-                    payment.setStatus(PaymentStatus.PAID);
-                    payment.setPaidAt(LocalDateTime.now());
-                    paymentRepository.save(payment);
+        switch (newStatus) {
+            case PACKING -> {
+                order.setShippingStatus(ShippingStatus.PREPARING);
+            }
+            case SHIPPING -> {
+                order.setShippingStatus(ShippingStatus.SHIPPED);
+            }
+            case DELIVERED -> {
+                order.setShippingStatus(ShippingStatus.DELIVERED);
+            }
+            case COMPLETED -> {
+                order.setShippingStatus(ShippingStatus.DELIVERED);
+                if (order.getPaymentStatus() == PaymentStatus.UNPAID) {
+                    order.setPaymentStatus(PaymentStatus.PAID);
+
+                    Payment payment = paymentRepository.findByOrderId(order.getId())
+                            .orElse(null);
+
+                    if (payment != null) {
+                        payment.setStatus(PaymentStatus.PAID);
+                        payment.setPaidAt(LocalDateTime.now());
+                        paymentRepository.save(payment);
+                    }
                 }
             }
+            default -> {}
         }
-
         order.setStatus(newStatus);
         Order saved = orderRepository.save(order);
         List<OrderItem> items = orderItemRepository.findAllByOrderId(saved.getId());
@@ -308,15 +352,133 @@ public class OrderServiceImpl implements IOrderService {
 
     @Override
     @Transactional
-    public OrderResponse payOrder(Long orderId, String paymentProvider, String transactionId) {
+    public PaymentResponse payOrder(Long orderId, String paymentProvider) {
         Order order = orderRepository.findById(orderId)
                 .orElseThrow(() -> new AppException(ErrorCode.BAD_REQUEST));
+        User buyer = getCurrentUser();
+        if (!order.getBuyerId().equals(buyer.getId())) {
+            throw new AppException(ErrorCode.FORBIDDEN);
+        }
+        if (order.getPaymentStatus() == PaymentStatus.PAID) {
+            throw new AppException(ErrorCode.BAD_REQUEST);
+        }
 
         Payment payment = paymentRepository.findByOrderId(order.getId())
                 .orElseThrow(() -> new AppException(ErrorCode.BAD_REQUEST));
 
         payment.setProvider(paymentProvider);
-        payment.setProviderTransactionId(transactionId);
+        if ("COD".equalsIgnoreCase(paymentProvider)) {
+            payment.setStatus(PaymentStatus.UNPAID);
+            paymentRepository.save(payment);
+
+            order.setPaymentStatus(PaymentStatus.UNPAID);
+            order.setStatus(OrderStatus.SELLER_CONFIRMING);
+            orderRepository.save(order);
+
+            return mapPaymentResponse(payment, null);
+        }
+
+        String redirectUrl;
+        if ("PAYPAL".equalsIgnoreCase(paymentProvider)) {
+            redirectUrl = createPaypalCheckoutUrl(order);
+        } else if ("STRIPE".equalsIgnoreCase(paymentProvider)) {
+            redirectUrl = createStripeCheckoutUrl(order);
+        } else {
+            throw new AppException(ErrorCode.BAD_REQUEST);
+        }
+
+        payment.setStatus(PaymentStatus.PENDING);
+        payment.setPaidAt(null);
+        paymentRepository.save(payment);
+
+        order.setPaymentStatus(PaymentStatus.PENDING);
+        order.setStatus(OrderStatus.PENDING_PAYMENT);
+        orderRepository.save(order);
+
+        return mapPaymentResponse(payment, redirectUrl);
+    }
+
+    private String createStripeCheckoutUrl(Order order) {
+        if (stripeSecretKey == null || stripeSecretKey.isBlank()) {
+            throw new AppException(ErrorCode.BAD_REQUEST);
+        }
+
+        String orderUrl = orderDetailUrl(order.getId());
+        HttpHeaders headers = new HttpHeaders();
+        headers.setBearerAuth(stripeSecretKey);
+        headers.setContentType(MediaType.APPLICATION_FORM_URLENCODED);
+
+        MultiValueMap<String, String> body = new LinkedMultiValueMap<>();
+        body.add("mode", "payment");
+        body.add("success_url", orderUrl + "?payment=stripe-success&session_id={CHECKOUT_SESSION_ID}");
+        body.add("cancel_url", orderUrl + "?payment=stripe-cancel");
+        body.add("line_items[0][quantity]", "1");
+        body.add("line_items[0][price_data][currency]", stripeCurrency.toLowerCase(Locale.ROOT));
+        body.add("line_items[0][price_data][product_data][name]", "TopTop order " + order.getOrderCode());
+        body.add("line_items[0][price_data][unit_amount]", stripeUnitAmount(order.getTotalAmount(), stripeCurrency));
+        body.add("metadata[orderId]", order.getId().toString());
+        body.add("metadata[orderCode]", order.getOrderCode());
+
+        ResponseEntity<Map> response = restTemplate.postForEntity(
+                "https://api.stripe.com/v1/checkout/sessions",
+                new HttpEntity<>(body, headers),
+                Map.class
+        );
+
+        Map<?, ?> responseBody = response.getBody();
+        Object id = responseBody != null ? responseBody.get("id") : null;
+        if (id != null) {
+            Payment payment = paymentRepository.findByOrderId(order.getId()).orElse(null);
+            if (payment != null) {
+                payment.setProviderTransactionId(id.toString());
+                paymentRepository.save(payment);
+            }
+        }
+
+        Object url = responseBody != null ? responseBody.get("url") : null;
+        if (url == null || url.toString().isBlank()) {
+            throw new AppException(ErrorCode.BAD_REQUEST);
+        }
+        return url.toString();
+    }
+
+    @Override
+    @Transactional
+    public OrderResponse completePayment(Long orderId, String paymentProvider, String providerReference) {
+        Order order = orderRepository.findById(orderId)
+                .orElseThrow(() -> new AppException(ErrorCode.BAD_REQUEST));
+        User buyer = getCurrentUser();
+        if (!order.getBuyerId().equals(buyer.getId())) {
+            throw new AppException(ErrorCode.FORBIDDEN);
+        }
+        if (order.getPaymentStatus() == PaymentStatus.PAID) {
+            return getOrderById(order.getId());
+        }
+        if (providerReference == null || providerReference.isBlank()) {
+            throw new AppException(ErrorCode.BAD_REQUEST);
+        }
+
+        Payment payment = paymentRepository.findByOrderId(order.getId())
+                .orElseThrow(() -> new AppException(ErrorCode.BAD_REQUEST));
+        boolean paid;
+        if ("PAYPAL".equalsIgnoreCase(paymentProvider)) {
+            paid = capturePaypalPayment(providerReference, order);
+        } else if ("STRIPE".equalsIgnoreCase(paymentProvider)) {
+            paid = verifyStripePayment(providerReference, order);
+        } else {
+            throw new AppException(ErrorCode.BAD_REQUEST);
+        }
+
+        if (!paid) {
+            payment.setStatus(PaymentStatus.FAILED);
+            paymentRepository.save(payment);
+            order.setPaymentStatus(PaymentStatus.FAILED);
+            orderRepository.save(order);
+            throw new AppException(ErrorCode.BAD_REQUEST);
+        }
+
+        payment.setProvider(paymentProvider);
+        payment.setProviderTransactionId(providerReference);
         payment.setStatus(PaymentStatus.PAID);
         payment.setPaidAt(LocalDateTime.now());
         paymentRepository.save(payment);
@@ -328,6 +490,179 @@ public class OrderServiceImpl implements IOrderService {
         List<OrderItem> items = orderItemRepository.findAllByOrderId(saved.getId());
         Shop shop = shopRepository.findById(saved.getShopId()).orElseThrow();
         return mapToResponse(saved, items, shop.getName());
+    }
+
+    private boolean verifyStripePayment(String sessionId, Order order) {
+        if (stripeSecretKey == null || stripeSecretKey.isBlank()) {
+            throw new AppException(ErrorCode.BAD_REQUEST);
+        }
+
+        HttpHeaders headers = new HttpHeaders();
+        headers.setBearerAuth(stripeSecretKey);
+        ResponseEntity<Map> response = restTemplate.exchange(
+                "https://api.stripe.com/v1/checkout/sessions/" + sessionId,
+                HttpMethod.GET,
+                new HttpEntity<>(headers),
+                Map.class
+        );
+
+        Map<?, ?> responseBody = response.getBody();
+        if (responseBody == null) {
+            return false;
+        }
+        Object paymentStatus = responseBody.get("payment_status");
+        Object amountTotal = responseBody.get("amount_total");
+        String expectedAmount = stripeUnitAmount(order.getTotalAmount(), stripeCurrency);
+        return "paid".equals(paymentStatus)
+                && amountTotal != null
+                && expectedAmount.equals(amountTotal.toString());
+    }
+
+    private boolean capturePaypalPayment(String paypalOrderId, Order order) {
+        if (paypalClientId == null || paypalClientId.isBlank() || paypalClientSecret == null || paypalClientSecret.isBlank()) {
+            throw new AppException(ErrorCode.BAD_REQUEST);
+        }
+
+        String accessToken = requestPaypalAccessToken();
+        HttpHeaders headers = new HttpHeaders();
+        headers.setBearerAuth(accessToken);
+        headers.setContentType(MediaType.APPLICATION_JSON);
+        ResponseEntity<Map> response = restTemplate.postForEntity(
+                paypalBaseUrl + "/v2/checkout/orders/" + paypalOrderId + "/capture",
+                new HttpEntity<>(Map.of(), headers),
+                Map.class
+        );
+
+        Map<?, ?> responseBody = response.getBody();
+        if (responseBody == null || !"COMPLETED".equals(responseBody.get("status"))) {
+            return false;
+        }
+
+        Object purchaseUnits = responseBody.get("purchase_units");
+        if (purchaseUnits instanceof List<?> units && !units.isEmpty() && units.get(0) instanceof Map<?, ?> unit) {
+            Object referenceId = unit.get("reference_id");
+            return order.getId().toString().equals(String.valueOf(referenceId));
+        }
+        return false;
+    }
+
+    private String createPaypalCheckoutUrl(Order order) {
+        if (paypalClientId == null || paypalClientId.isBlank() || paypalClientSecret == null || paypalClientSecret.isBlank()) {
+            throw new AppException(ErrorCode.BAD_REQUEST);
+        }
+
+        String accessToken = requestPaypalAccessToken();
+        HttpHeaders headers = new HttpHeaders();
+        headers.setBearerAuth(accessToken);
+        headers.setContentType(MediaType.APPLICATION_JSON);
+
+        Map<String, Object> body = Map.of(
+                "intent", "CAPTURE",
+                "purchase_units", List.of(Map.of(
+                        "reference_id", order.getId().toString(),
+                        "description", "TopTop order " + order.getOrderCode(),
+                        "amount", Map.of(
+                                "currency_code", paypalCurrency.toUpperCase(Locale.ROOT),
+                                "value", paypalAmount(order.getTotalAmount(), order.getCurrency())
+                        )
+                )),
+                "application_context", Map.of(
+                        "return_url", orderDetailUrl(order.getId()) + "?payment=paypal-success",
+                        "cancel_url", orderDetailUrl(order.getId()) + "?payment=paypal-cancel"
+                )
+        );
+
+        ResponseEntity<Map> response = restTemplate.postForEntity(
+                paypalBaseUrl + "/v2/checkout/orders",
+                new HttpEntity<>(body, headers),
+                Map.class
+        );
+
+        Map<?, ?> responseBody = response.getBody();
+        if (responseBody != null) {
+            Object id = responseBody.get("id");
+            Payment payment = paymentRepository.findByOrderId(order.getId()).orElse(null);
+            if (payment != null && id != null) {
+                payment.setProviderTransactionId(id.toString());
+                paymentRepository.save(payment);
+            }
+
+            Object links = responseBody.get("links");
+            if (links instanceof List<?> linkList) {
+                for (Object link : linkList) {
+                    if (link instanceof Map<?, ?> linkMap && "approve".equals(linkMap.get("rel"))) {
+                        Object href = linkMap.get("href");
+                        if (href != null) {
+                            return href.toString();
+                        }
+                    }
+                }
+            }
+        }
+        throw new AppException(ErrorCode.BAD_REQUEST);
+    }
+
+    private String requestPaypalAccessToken() {
+        HttpHeaders headers = new HttpHeaders();
+        headers.setBasicAuth(paypalClientId, paypalClientSecret);
+        headers.setContentType(MediaType.APPLICATION_FORM_URLENCODED);
+
+        MultiValueMap<String, String> body = new LinkedMultiValueMap<>();
+        body.add("grant_type", "client_credentials");
+
+        ResponseEntity<Map> response = restTemplate.postForEntity(
+                paypalBaseUrl + "/v1/oauth2/token",
+                new HttpEntity<>(body, headers),
+                Map.class
+        );
+
+        Object token = response.getBody() != null ? response.getBody().get("access_token") : null;
+        if (token == null || token.toString().isBlank()) {
+            throw new AppException(ErrorCode.BAD_REQUEST);
+        }
+        return token.toString();
+    }
+
+    private String stripeUnitAmount(BigDecimal amount, String currency) {
+        boolean zeroDecimal = Set.of("bif", "clp", "djf", "gnf", "jpy", "kmf", "krw", "mga", "pyg", "rwf", "ugx", "vnd", "vuv", "xaf", "xof", "xpf")
+                .contains(currency.toLowerCase(Locale.ROOT));
+        BigDecimal unitAmount = zeroDecimal ? amount : amount.multiply(BigDecimal.valueOf(100));
+        return unitAmount.setScale(0, RoundingMode.HALF_UP).toPlainString();
+    }
+
+    private String paypalAmount(BigDecimal amount, String orderCurrency) {
+        BigDecimal converted = amount;
+        if ("VND".equalsIgnoreCase(orderCurrency) && "USD".equalsIgnoreCase(paypalCurrency)) {
+            converted = amount.divide(paypalVndToUsdRate, 2, RoundingMode.HALF_UP);
+        }
+        return converted.setScale(2, RoundingMode.HALF_UP).toPlainString();
+    }
+
+    private String orderDetailUrl(Long orderId) {
+        return UriComponentsBuilder.fromUriString(frontendProperties.getPrimaryUrl())
+                .path("/orders/{orderId}")
+                .buildAndExpand(orderId)
+                .toUriString();
+    }
+
+    private void ensureShopIsNotOwnedByBuyer(Shop shop, User buyer) {
+        if (shop.getOwnerId().equals(buyer.getId())) {
+            throw new AppException(ErrorCode.CANNOT_BUY_OWN_SHOP_PRODUCT);
+        }
+    }
+
+    private PaymentResponse mapPaymentResponse(Payment payment, String redirectUrl) {
+        return PaymentResponse.builder()
+                .id(payment.getId())
+                .orderId(payment.getOrderId())
+                .provider(payment.getProvider())
+                .providerTransactionId(payment.getProviderTransactionId())
+                .redirectUrl(redirectUrl)
+                .amount(payment.getAmount())
+                .currency(payment.getCurrency())
+                .status(payment.getStatus().name())
+                .paidAt(payment.getPaidAt())
+                .build();
     }
 
     @Override
@@ -394,6 +729,7 @@ public class OrderServiceImpl implements IOrderService {
                         .totalPrice(oi.getTotalPrice())
                         .build())
                 .toList();
+        ShopPayout payout = calculateShopPayout(order);
 
         return OrderResponse.builder()
                 .id(order.getId())
@@ -405,6 +741,11 @@ public class OrderServiceImpl implements IOrderService {
                 .shippingFee(order.getShippingFee())
                 .discountAmount(order.getDiscountAmount())
                 .totalAmount(order.getTotalAmount())
+                .commissionBaseAmount(payout.commissionBaseAmount())
+                .shopPayoutRate(payout.shopPayoutRate())
+                .shopPayoutAmount(payout.shopPayoutAmount())
+                .platformFeeAmount(payout.platformFeeAmount())
+                .commissionTier(payout.commissionTier())
                 .currency(order.getCurrency())
                 .status(order.getStatus().name())
                 .paymentStatus(order.getPaymentStatus().name())
@@ -416,5 +757,54 @@ public class OrderServiceImpl implements IOrderService {
                 .createdAt(order.getCreatedAt())
                 .items(itemResponses)
                 .build();
+    }
+
+    private ShopPayout calculateShopPayout(Order order) {
+        BigDecimal commissionBase = order.getSubtotalAmount()
+                .subtract(order.getDiscountAmount() != null ? order.getDiscountAmount() : BigDecimal.ZERO)
+                .max(BigDecimal.ZERO);
+
+        if (order.getPaymentStatus() != PaymentStatus.PAID) {
+            return new ShopPayout(
+                    commissionBase,
+                    BigDecimal.ZERO,
+                    BigDecimal.ZERO,
+                    commissionBase,
+                    "UNPAID"
+            );
+        }
+
+        List<PaymentStatus> paidStatuses = List.of(PaymentStatus.PAID);
+        long paidOrderCount = orderRepository.countByShopIdAndPaymentStatusIn(order.getShopId(), paidStatuses);
+        BigDecimal paidGross = orderRepository.sumPaidTotalByShopId(
+                order.getShopId(),
+                paidStatuses.stream().map(Enum::name).toList()
+        );
+
+        BigDecimal shopPayoutRate;
+        String tier;
+        if (paidOrderCount >= 100 || paidGross.compareTo(BigDecimal.valueOf(50_000_000L)) >= 0) {
+            shopPayoutRate = BigDecimal.valueOf(0.40);
+            tier = "LARGE";
+        } else if (paidOrderCount >= 30 || paidGross.compareTo(BigDecimal.valueOf(10_000_000L)) >= 0) {
+            shopPayoutRate = BigDecimal.valueOf(0.35);
+            tier = "MEDIUM";
+        } else {
+            shopPayoutRate = BigDecimal.valueOf(0.30);
+            tier = "SMALL";
+        }
+
+        BigDecimal shopPayout = commissionBase.multiply(shopPayoutRate).setScale(2, RoundingMode.HALF_UP);
+        BigDecimal platformFee = commissionBase.subtract(shopPayout).setScale(2, RoundingMode.HALF_UP);
+        return new ShopPayout(commissionBase, shopPayoutRate, shopPayout, platformFee, tier);
+    }
+
+    private record ShopPayout(
+            BigDecimal commissionBaseAmount,
+            BigDecimal shopPayoutRate,
+            BigDecimal shopPayoutAmount,
+            BigDecimal platformFeeAmount,
+            String commissionTier
+    ) {
     }
 }
