@@ -96,6 +96,13 @@ public class CartServiceImpl implements ICartService {
             if (!variant.getProductId().equals(product.getId()) || !"ACTIVE".equals(variant.getStatus())) {
                 throw new AppException(ErrorCode.BAD_REQUEST);
             }
+        } else {
+            boolean hasActiveVariants = productVariantRepository.findAllByProductId(product.getId())
+                    .stream()
+                    .anyMatch(v -> "ACTIVE".equals(v.getStatus()));
+            if (hasActiveVariants) {
+                throw new AppException(ErrorCode.BAD_REQUEST);
+            }
         }
 
         int requestedQty = request.getQuantity();
