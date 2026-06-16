@@ -12,6 +12,8 @@ import lombok.Getter;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
+import com.back.common.utils.exception.AppException;
+import com.back.common.utils.exception.ErrorCode;
 
 import java.net.URI;
 import java.net.http.HttpClient;
@@ -41,10 +43,12 @@ public class LiveKitTokenService {
     @PostConstruct
     void validateConfig() {
         if (isBlank(livekitUrl) || isBlank(apiKey) || isBlank(apiSecret)) {
-            throw new IllegalStateException("LiveKit config is incomplete. Check LIVEKIT_URL, LIVEKIT_API_KEY, and LIVEKIT_API_SECRET.");
+            log.warn("LiveKit config is incomplete. Check LIVEKIT_URL, LIVEKIT_API_KEY, and LIVEKIT_API_SECRET. Livestreaming features will fail until these are set.");
+            return;
         }
         if (!livekitUrl.startsWith("wss://") && !livekitUrl.startsWith("ws://")) {
-            throw new IllegalStateException("LIVEKIT_URL must be a websocket URL, for example wss://your-project.livekit.cloud.");
+            log.warn("LIVEKIT_URL must be a websocket URL, for example wss://your-project.livekit.cloud. Currently configured: {}", livekitUrl);
+            return;
         }
         log.info("LiveKit configured for {}", livekitUrl);
     }
@@ -54,6 +58,9 @@ public class LiveKitTokenService {
     }
 
     private AccessToken createToken(String roomName, String appUserId, String displayName, String role) {
+        if (isBlank(apiKey) || isBlank(apiSecret)) {
+            throw new AppException(ErrorCode.BAD_REQUEST, "livekit", "Cannot create LiveKit token because LiveKit credentials are not configured.");
+        }
         AccessToken token = new AccessToken(apiKey, apiSecret);
         token.setName(displayName);
         token.setIdentity(buildLiveKitIdentity(appUserId, role));
@@ -128,17 +135,20 @@ public class LiveKitTokenService {
                 log.info("LiveKit room {} was already gone", roomName);
                 return;
             }
-            throw new IllegalStateException("LiveKit DeleteRoom failed with HTTP " + status + ": " + response.body());
+            throw new AppException(ErrorCode.INTERNAL_ERROR, "livekit", "LiveKit DeleteRoom failed with HTTP " + status + ": " + response.body());
         } catch (InterruptedException e) {
             Thread.currentThread().interrupt();
-            throw new IllegalStateException("Interrupted while deleting LiveKit room " + roomName, e);
+            throw new AppException(ErrorCode.INTERNAL_ERROR, "livekit", "Interrupted while deleting LiveKit room " + roomName);
         } catch (Exception e) {
             log.warn("Could not delete LiveKit room {}: {}", roomName, e.getMessage());
-            throw new IllegalStateException("Could not delete LiveKit room " + roomName, e);
+            throw new AppException(ErrorCode.INTERNAL_ERROR, "livekit", "Could not delete LiveKit room " + roomName);
         }
     }
 
     private String generateRoomServiceToken() {
+        if (isBlank(apiKey) || isBlank(apiSecret)) {
+            throw new AppException(ErrorCode.INTERNAL_ERROR, "livekit", "Cannot generate LiveKit service token because LiveKit credentials are not configured.");
+        }
         AccessToken token = new AccessToken(apiKey, apiSecret);
         token.setIdentity("server_livestream_service");
         token.setName("Livestream Server");
