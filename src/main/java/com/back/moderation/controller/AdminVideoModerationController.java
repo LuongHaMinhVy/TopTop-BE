@@ -72,6 +72,22 @@ public class AdminVideoModerationController {
                 .build());
     }
 
+    @GetMapping("/audit-logs")
+    public ResponseEntity<ApiResponse<Page<com.back.moderation.model.entity.ModerationAuditLog>>> getAuditLogs(
+            @RequestParam(defaultValue = "0") int page,
+            @RequestParam(defaultValue = "20") int size) {
+
+        Pageable pageable = PageRequest.of(page, size, org.springframework.data.domain.Sort.by(org.springframework.data.domain.Sort.Direction.DESC, "createdAt"));
+        Page<com.back.moderation.model.entity.ModerationAuditLog> data = moderationService.getAuditLogs(pageable);
+
+        return ResponseEntity.ok(ApiResponse.<Page<com.back.moderation.model.entity.ModerationAuditLog>>builder()
+                .data(data)
+                .message("Audit logs loaded")
+                .status(HttpStatus.OK.value())
+                .timestamp(LocalDateTime.now())
+                .build());
+    }
+
     private Long getCurrentAdminId() {
         Authentication auth = SecurityContextHolder.getContext().getAuthentication();
         if (auth == null) return null;

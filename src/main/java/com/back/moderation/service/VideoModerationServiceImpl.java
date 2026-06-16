@@ -507,4 +507,9 @@ public class VideoModerationServiceImpl implements IVideoModerationService {
         if (parts.isEmpty()) return null;
         return "Phát hiện " + String.join(", ", parts) + " trong video.";
     }
+
+    @Override
+    public Page<ModerationAuditLog> getAuditLogs(Pageable pageable) {
+        return auditLogRepository.findAll(pageable);
+    }
 }

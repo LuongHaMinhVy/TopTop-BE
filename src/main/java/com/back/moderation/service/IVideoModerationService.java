@@ -5,6 +5,7 @@ import com.back.moderation.model.dto.request.ReviewVideoModerationRequestDTO;
 import com.back.moderation.model.dto.response.VideoModerationDetailResponseDTO;
 import com.back.moderation.model.dto.response.ModerationQueueItemResponseDTO;
 import com.back.moderation.model.enums.VideoModerationStatus;
+import com.back.moderation.model.entity.ModerationAuditLog;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 
@@ -15,4 +16,5 @@ public interface IVideoModerationService {
     Page<ModerationQueueItemResponseDTO> getAdminQueue(VideoModerationStatus status, Pageable pageable);
     VideoModerationDetailResponseDTO getAdminDetail(Long videoId);
     VideoModerationSummaryResponseDTO reviewVideo(Long videoId, ReviewVideoModerationRequestDTO request, Long adminUserId);
+    Page<ModerationAuditLog> getAuditLogs(Pageable pageable);
 }
