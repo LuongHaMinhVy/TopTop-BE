@@ -1,6 +1,6 @@
 spring:
   main:
-    lazy-initialization: true
+    lazy-initialization: false
   application:
     name: back
   security:
@@ -82,6 +82,7 @@ spring:
 
 server:
   port: ${PORT:8080}
+  address: 0.0.0.0
   forward-headers-strategy: framework
 
 
