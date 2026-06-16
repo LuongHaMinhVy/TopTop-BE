@@ -75,7 +75,6 @@ spring:
   data:
     verification-expiration-hours: ${VERIFICATION_EXPIRY_HOURS:24}
     redis:
-      url: ${REDIS_URL:}
       host: ${REDIS_HOST:localhost}
       port: ${REDIS_PORT:6379}
       password: ${REDIS_PASSWORD:}

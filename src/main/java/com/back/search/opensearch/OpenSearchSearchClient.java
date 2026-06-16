@@ -44,8 +44,21 @@ public class OpenSearchSearchClient {
         }
 
         try {
+            // Check if index already exists
+            ResponseEntity<Void> response = restTemplate.exchange(indexUrl(), HttpMethod.HEAD, new HttpEntity<>(authHeaders()), Void.class);
+            if (response.getStatusCode().is2xxSuccessful()) {
+                log.info("OpenSearch index {} already exists", properties.getIndexName());
+                return;
+            }
+        } catch (Exception ex) {
+            // Index likely doesn't exist (returns 404), proceed to create it
+            log.info("OpenSearch index {} does not exist, creating it...", properties.getIndexName());
+        }
+
+        try {
             restTemplate.exchange(indexUrl(), HttpMethod.PUT, new HttpEntity<>(indexMapping(), jsonHeaders()), String.class);
-        } catch (RestClientException ex) {
+            log.info("Successfully created OpenSearch index {}", properties.getIndexName());
+        } catch (Exception ex) {
             log.warn("Could not ensure OpenSearch index {}", properties.getIndexName(), ex);
         }
     }
@@ -61,7 +74,7 @@ public class OpenSearchSearchClient {
 
         try {
             restTemplate.exchange(url("/_bulk"), HttpMethod.POST, new HttpEntity<>(body.toString(), ndjsonHeaders()), String.class);
-        } catch (RestClientException ex) {
+        } catch (Exception ex) {
             log.warn("Could not bulk index search documents into OpenSearch", ex);
         }
     }
@@ -110,7 +123,7 @@ public class OpenSearchSearchClient {
                     String.class
             );
             return Optional.of(parseSearchPage(response.getBody()));
-        } catch (JsonProcessingException | RestClientException ex) {
+        } catch (Exception ex) {
             log.warn("OpenSearch search failed for type {} keyword '{}'", type, keyword, ex);
             return Optional.empty();
         }
@@ -149,7 +162,7 @@ public class OpenSearchSearchClient {
                 addSuggestion(suggestions, source.path("content").asText(""));
             });
             return suggestions.stream().limit(limit).toList();
-        } catch (JsonProcessingException | RestClientException ex) {
+        } catch (Exception ex) {
             log.warn("OpenSearch suggestions failed for keyword '{}'", keyword, ex);
             return List.of();
         }
@@ -179,7 +192,7 @@ public class OpenSearchSearchClient {
                     String.class
             );
             return parseCorrection(keyword, response.getBody());
-        } catch (JsonProcessingException | RestClientException ex) {
+        } catch (Exception ex) {
             log.warn("OpenSearch correction suggestion failed for keyword '{}'", keyword, ex);
             return Optional.empty();
         }
