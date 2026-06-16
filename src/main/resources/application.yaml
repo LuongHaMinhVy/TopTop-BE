@@ -8,15 +8,15 @@ spring:
       client:
         registration:
           google:
-            clientId: ${GOOGLE_CLIENT_ID}
-            clientSecret: ${GOOGLE_CLIENT_SECRET}
+            clientId: ${GOOGLE_CLIENT_ID:dummy-google-client-id}
+            clientSecret: ${GOOGLE_CLIENT_SECRET:dummy-google-client-secret}
             redirectUri: ${GOOGLE_REDIRECT_URI:{baseUrl}/login/oauth2/code/{registrationId}}
             scope:
               - email
               - profile
           facebook:
-            client-id: ${FACEBOOK_APP_ID}
-            client-secret: ${FACEBOOK_APP_SECRET}
+            client-id: ${FACEBOOK_APP_ID:dummy-facebook-app-id}
+            client-secret: ${FACEBOOK_APP_SECRET:dummy-facebook-app-secret}
             scope:
               - email
               - public_profile
@@ -28,17 +28,23 @@ spring:
             user-name-attribute: id
   servlet:
     multipart:
-      max-file-size: ${MAX_FILE_SIZE}
-      max-request-size: ${MAX_REQUEST_SIZE}
+      max-file-size: ${MAX_FILE_SIZE:10MB}
+      max-request-size: ${MAX_REQUEST_SIZE:10MB}
   datasource:
-    url: ${DB_URL}
-    username: ${DB_USERNAME}
-    password: ${DB_PASSWORD}
+    url: ${DB_URL:${JDBC_DATABASE_URL:jdbc:mysql://localhost:3306/toptop?useSSL=false&allowPublicKeyRetrieval=true}}
+    username: ${DB_USERNAME:root}
+    password: ${DB_PASSWORD:}
     driver-class-name: com.mysql.cj.jdbc.Driver
+    hikari:
+      maximum-pool-size: ${DB_POOL_MAX:10}
+      minimum-idle: ${DB_POOL_MIN:2}
+      idle-timeout: 30000
+      connection-timeout: 20000
+      max-lifetime: 1800000
 
   jpa:
     hibernate:
-      ddl-auto: validate
+      ddl-auto: ${SPRING_JPA_HIBERNATE_DDL_AUTO:${DDL_AUTO:validate}}
     show-sql: false
     properties:
       hibernate:
@@ -53,10 +59,10 @@ spring:
     type: redis
 
   mail:
-    host: ${MAIL_HOST}
-    port: ${MAIL_PORT}
-    username: ${MAIL_USERNAME}
-    password: ${MAIL_PASSWORD}
+    host: ${MAIL_HOST:smtp.gmail.com}
+    port: ${MAIL_PORT:587}
+    username: ${MAIL_USERNAME:}
+    password: ${MAIL_PASSWORD:}
     properties:
       mail:
         smtp:
@@ -64,24 +70,25 @@ spring:
           starttls:
             enable: true
   data:
-    verification-expiration-hours: ${VERIFICATION_EXPIRY_HOURS}
+    verification-expiration-hours: ${VERIFICATION_EXPIRY_HOURS:24}
     redis:
-      host: ${REDIS_HOST}
-      port: ${REDIS_PORT}
-      password: ${REDIS_PASSWORD}
-      timeout: ${REDIS_TIMEOUT}
+      url: ${REDIS_URL:}
+      host: ${REDIS_HOST:localhost}
+      port: ${REDIS_PORT:6379}
+      password: ${REDIS_PASSWORD:}
+      timeout: ${REDIS_TIMEOUT:60000}
       ssl:
-        enabled: true
+        enabled: ${REDIS_SSL_ENABLED:true}
 
 server:
-  port: 8080
+  port: ${PORT:8080}
   forward-headers-strategy: framework
 
 
 jwt:
-  secret: ${SECRET_KEY}
-  access-token-expiration: ${ACCESS_TOKEN_EXPIRATION_TIME}
-  refresh-token-expiration: ${REFRESH_TOKEN_EXPIRATION_TIME}
+  secret: ${SECRET_KEY:default_secret_key_must_be_changed_in_production_at_least_256_bits_long}
+  access-token-expiration: ${ACCESS_TOKEN_EXPIRATION_TIME:86400000}
+  refresh-token-expiration: ${REFRESH_TOKEN_EXPIRATION_TIME:604800000}
 
 frontend:
   urls: ${FRONTEND_URLS:${CORS_ALLOWED_ORIGINS:http://localhost:3000,http://localhost:3001,http://localhost:3002,http://127.0.0.1:3000,http://127.0.0.1:3001,http://127.0.0.1:3002,http://26.87.198.178:3000,http://26.87.198.178:3001,http://26.87.198.178:3002}}
@@ -95,17 +102,17 @@ springdoc:
 
 logging:
   level:
-    org.springframework.security: DEBUG
-    org.hibernate.SQL: DEBUG
+    org.springframework.security: ${SECURITY_LOG_LEVEL:INFO}
+    org.hibernate.SQL: ${SQL_LOG_LEVEL:WARN}
 
 cloudflare:
   r2:
-    account-id: ${R2_ACCOUNT_ID}
-    access-key: ${R2_ACCESS_KEY}
-    secret-key: ${R2_SECRET_KEY}
-    bucket-name: ${R2_BUCKET_NAME}
-    endpoint: ${R2_ENDPOINT}
-    public-url: ${R2_PUBLIC_URL}
+    account-id: ${R2_ACCOUNT_ID:}
+    access-key: ${R2_ACCESS_KEY:}
+    secret-key: ${R2_SECRET_KEY:}
+    bucket-name: ${R2_BUCKET_NAME:}
+    endpoint: ${R2_ENDPOINT:https://dummy-endpoint.com}
+    public-url: ${R2_PUBLIC_URL:https://dummy-url.com}
 
 moderation:
   auto-approve-threshold: 0.35
@@ -134,9 +141,9 @@ ffmpeg:
   max-frames: ${FFMPEG_MAX_FRAMES:5}
 
 livekit:
-  url: ${LIVEKIT_URL}
-  api-key: ${LIVEKIT_API_KEY}
-  api-secret: ${LIVEKIT_API_SECRET}
+  url: ${LIVEKIT_URL:ws://localhost:7880}
+  api-key: ${LIVEKIT_API_KEY:dummy_key}
+  api-secret: ${LIVEKIT_API_SECRET:dummy_secret}
 
 payment:
   default-currency: VND
@@ -170,8 +177,8 @@ langchain4j:
   google-ai-gemini:
     chat-model:
       api-key: ${GEMINI_API_KEY:}
-      model-name: gemini-2.5-flash
-      temperature: 0.2
-      timeout: 60s
-      log-requests: true
-      log-responses: true
+      model-name: ${GEMINI_MODEL:gemini-2.5-flash}
+      temperature: ${GEMINI_TEMPERATURE:0.2}
+      timeout: ${GEMINI_TIMEOUT:60s}
+      log-requests: ${GEMINI_LOG_REQUESTS:false}
+      log-responses: ${GEMINI_LOG_RESPONSES:false}
