@@ -1,0 +1,18 @@
+package com.back.sound.model.dto.response;
+
+import lombok.AllArgsConstructor;
+import lombok.Builder;
+import lombok.Data;
+import lombok.NoArgsConstructor;
+
+@Data
+@Builder
+@NoArgsConstructor
+@AllArgsConstructor
+public class SoundStatsResponseDTO {
+    private Long soundId;
+    private Long usageCount;
+    private Long videoCount;
+    private Long savedCount;
+    private Boolean isSaved;
+}

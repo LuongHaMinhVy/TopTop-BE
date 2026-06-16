@@ -3,6 +3,8 @@ package com.back.common.utils.exception;
 import lombok.Getter;
 import org.springframework.http.HttpStatus;
 
+import com.back.common.utils.Translator;
+
 @Getter
 public enum ErrorCode {
 
@@ -25,6 +27,7 @@ public enum ErrorCode {
     ACCOUNT_LOCKED(HttpStatus.FORBIDDEN, "Account is locked. Please contact support for assistance"),
     TOO_MANY_REQUESTS(HttpStatus.TOO_MANY_REQUESTS, "Too many requests. Please try again later"),
     ROLE_NOT_FOUND(HttpStatus.INTERNAL_SERVER_ERROR, "Default role not found. Please contact support"),
+    BAD_REQUEST(HttpStatus.BAD_REQUEST, "Bad request"),
     UNAUTHORIZED(HttpStatus.UNAUTHORIZED, "Unauthorized"),
 
     ACCOUNT_BANNED(HttpStatus.FORBIDDEN, "Account has been banned. Please contact support for assistance"),
@@ -42,7 +45,7 @@ public enum ErrorCode {
     INVALID_FILE_TYPE(HttpStatus.BAD_REQUEST, "Invalid file type."),
     INVALID_VIDEO_FILE_TYPE(HttpStatus.BAD_REQUEST, "Invalid video file type. Only MP4, AVI, MOV, and WMV are supported"),
     INVALID_IMAGE_FILE_TYPE(HttpStatus.BAD_REQUEST, "Invalid image file type. Only JPG, JPEG, PNG, and GIF are supported"),
-    FILE_TOO_LARGE(HttpStatus.BAD_REQUEST, "File is too large. Maximum file size is 5MB"),
+    FILE_TOO_LARGE(HttpStatus.BAD_REQUEST, "File is too large. Maximum file size is 10MB"),
     INVALID_AUDIO_FILE_TYPE(HttpStatus.BAD_REQUEST, "Invalid audio file type. Only MP3, WAV, and OGG are supported"),
 
     INVALID_PAGE(HttpStatus.BAD_REQUEST, "Page must not be less than 1"),
@@ -50,15 +53,61 @@ public enum ErrorCode {
 
     GENRE_ALREADY_EXISTS(HttpStatus.CONFLICT, "Genre already exists"),
 
+    OAUTH2_EMAIL_NOT_FOUND(HttpStatus.NOT_FOUND, "Email not found in OAuth2 provider"),
+
     COPYRIGHT_DETECTED(HttpStatus.BAD_REQUEST, "Upload rejected: Copyrighted material detected."),
+    CANNOT_FOLLOW_SELF(HttpStatus.BAD_REQUEST, "You cannot follow yourself"),
+    CANNOT_BLOCK_SELF(HttpStatus.BAD_REQUEST, "You cannot block yourself"),
+    CANNOT_REPOST_SELF(HttpStatus.BAD_REQUEST, "You cannot repost your own video"),
+    CANNOT_BUY_OWN_SHOP_PRODUCT(HttpStatus.BAD_REQUEST, "You cannot buy products from your own shop"),
+    CANNOT_MARK_OWN_VIDEO_NOT_INTERESTED(HttpStatus.BAD_REQUEST, "You cannot mark your own video as not interested"),
+    CANNOT_MARK_INTERESTED_VIDEO_NOT_INTERESTED(HttpStatus.BAD_REQUEST, "Liked or saved videos cannot be marked as not interested"),
+    USER_BLOCKED(HttpStatus.FORBIDDEN, "Video is unavailable"),
+    ADMIN_LOGIN_NOT_ALLOWED(HttpStatus.FORBIDDEN, "Admin accounts are not allowed to log in to the user application"),
+    USER_LOGIN_NOT_ALLOWED(HttpStatus.FORBIDDEN, "Only admin accounts can log in to the admin portal"),
+    
+    REPORT_TARGET_TYPE_NOT_SUPPORTED(HttpStatus.BAD_REQUEST, "Report target type not supported"),
+    REPORT_REASON_NOT_FOUND(HttpStatus.NOT_FOUND, "Report reason not found"),
+    REPORT_REASON_MUST_BE_LEAF(HttpStatus.BAD_REQUEST, "Report reason must be a specific reason, not a category"),
+    REPORT_ALREADY_SUBMITTED(HttpStatus.CONFLICT, "You have already reported this content for this reason"),
+    REPORT_RATE_LIMIT_EXCEEDED(HttpStatus.TOO_MANY_REQUESTS, "You have submitted too many reports recently. Please try again later"),
+    REPORT_NOT_FOUND(HttpStatus.NOT_FOUND, "Report not found"),
+    VIDEO_NOT_FOUND(HttpStatus.NOT_FOUND, "Video not found"),
+    SOUND_NOT_FOUND(HttpStatus.NOT_FOUND, "Sound not found"),
+    COMMENT_NOT_FOUND(HttpStatus.NOT_FOUND, "Comment not found"),
+    COMMENT_REJECTED_BY_MODERATION(HttpStatus.BAD_REQUEST, "Comment rejected by moderation"),
+    MESSAGE_REJECTED_BY_MODERATION(HttpStatus.BAD_REQUEST, "Message rejected by moderation"),
+    VIDEO_TEXT_REJECTED_BY_MODERATION(HttpStatus.BAD_REQUEST, "Video title or description rejected by moderation"),
+    COLLECTION_NOT_FOUND(HttpStatus.NOT_FOUND, "Collection not found"),
+    COLLECTION_ALREADY_EXISTS(HttpStatus.CONFLICT, "Collection already exists"),
+    COLLECTION_ACCESS_DENIED(HttpStatus.FORBIDDEN, "You do not have permission to access this collection"),
+    CHAT_ACCESS_DENIED(HttpStatus.FORBIDDEN, "You do not have permission to access this conversation"),
+    
+    LIVESTREAM_NOT_FOUND(HttpStatus.NOT_FOUND, "Livestream not found"),
+    LIVESTREAM_ALREADY_ACTIVE(HttpStatus.CONFLICT, "You already have an active livestream"),
+    LIVESTREAM_NOT_LIVE(HttpStatus.BAD_REQUEST, "Livestream is not currently live"),
+    LIVESTREAM_ENDED(HttpStatus.BAD_REQUEST, "Livestream has already ended"),
+    USER_BANNED_FROM_LIVE(HttpStatus.FORBIDDEN, "You are banned from this livestream"),
+    CHAT_DISABLED(HttpStatus.BAD_REQUEST, "Chat is disabled for this livestream"),
+    GIFTS_DISABLED(HttpStatus.BAD_REQUEST, "Gifts are disabled for this livestream"),
+    GIFT_NOT_FOUND(HttpStatus.NOT_FOUND, "Gift not found"),
+    MESSAGE_NOT_FOUND(HttpStatus.NOT_FOUND, "Message not found"),
+    FORBIDDEN(HttpStatus.FORBIDDEN, "You do not have permission to perform this action"),
+
     INTERNAL_ERROR(HttpStatus.INTERNAL_SERVER_ERROR, "Internal server error");
-
-
     private final HttpStatus status;
     private final String message;
 
     ErrorCode(HttpStatus status, String message) {
         this.status = status;
         this.message = message;
+    }
+
+    public String getMessage() {
+        try {
+            return Translator.toLocale("error." + this.name().toLowerCase(), this.message);
+        } catch (Exception e) {
+            return this.message;
+        }
     }
 }

@@ -19,4 +19,10 @@ public class AppException extends RuntimeException {
         this.errorCode = errorCode;
         this.field = field;
     }
+
+    public AppException(ErrorCode errorCode, String field, String message) {
+        super(message);
+        this.errorCode = errorCode;
+        this.field = field;
+    }
 }

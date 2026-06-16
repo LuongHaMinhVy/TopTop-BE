@@ -60,29 +60,10 @@ public class UserInfo {
     private RelationshipStatus relationship;
 
     private List<String> roles;
+    private Boolean onboarded;
 
     private LocalDateTime createdAt;
 
-    @Data
-    @Builder
-    @JsonInclude(JsonInclude.Include.NON_NULL)
-    public static class PrivacySettings {
-        private Boolean allowComments;
-        private Boolean allowDuet;
-        private Boolean allowStitch;
-        private Boolean allowDownload;
-        private Boolean allowMessageFromEveryone;
-        private String commentFilter;
-        private String messagePrivacy;
-    }
+    private LocalDateTime deletedAt;
 
-    @Data
-    @Builder
-    @JsonInclude(JsonInclude.Include.NON_NULL)
-    public static class RelationshipStatus {
-        private Boolean isFollowing;
-        private Boolean isFollower;
-        private Boolean isBlocked;
-        private Boolean isFriend;
-    }
 }

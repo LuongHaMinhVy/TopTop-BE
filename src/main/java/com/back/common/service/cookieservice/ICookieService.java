@@ -1,0 +1,14 @@
+package com.back.common.service.cookieservice;
+
+import jakarta.servlet.http.HttpServletRequest;
+import jakarta.servlet.http.HttpServletResponse;
+
+public interface ICookieService{
+    String get(HttpServletRequest request, String name);
+    void add(HttpServletResponse response, String name, String value, int maxAge);
+
+    void add(HttpServletResponse response, String name, String value,
+             int maxAge, HttpServletRequest request);
+
+    void clear(HttpServletResponse response, String name, HttpServletRequest request);
+}

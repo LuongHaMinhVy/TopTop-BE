@@ -24,6 +24,7 @@ dependencies {
     implementation 'org.springframework.boot:spring-boot-starter-validation'
     implementation 'org.springframework.boot:spring-boot-starter-webmvc'
     implementation 'org.springframework.boot:spring-boot-starter-actuator'
+    implementation 'org.springframework.boot:spring-boot-starter-security-oauth2-client'
     compileOnly 'org.projectlombok:lombok'
     developmentOnly 'org.springframework.boot:spring-boot-devtools'
     runtimeOnly 'com.mysql:mysql-connector-j'
@@ -48,8 +49,37 @@ dependencies {
     implementation 'org.apache.commons:commons-pool2'
     implementation 'org.springframework.boot:spring-boot-starter-cache'
     implementation 'com.fasterxml.jackson.datatype:jackson-datatype-jsr310:2.18.4'
+
+    implementation platform('software.amazon.awssdk:bom:2.25.0')
+    implementation 'software.amazon.awssdk:s3'
+
+    implementation 'software.amazon.awssdk:s3-transfer-manager'
+
+    implementation 'org.springframework.boot:spring-boot-starter-websocket'
+    implementation 'org.springframework.boot:spring-boot-starter-json'
+
+    implementation 'io.livekit:livekit-server:0.9.2'
+
+    testImplementation 'org.springframework.boot:spring-boot-starter-test'
+
+    implementation 'dev.langchain4j:langchain4j-core:1.16.1'
+    implementation 'dev.langchain4j:langchain4j-google-ai-gemini:1.16.1'
 }
 
 tasks.named('test') {
     useJUnitPlatform()
+    
+    // Load .env file for tests
+    File envFile = file('.env')
+    if (envFile.exists()) {
+        envFile.readLines().each { line ->
+            def trimmed = line.trim()
+            if (trimmed && !trimmed.startsWith('#') && trimmed.contains('=')) {
+                def parts = trimmed.split('=', 2)
+                def key = parts[0].trim()
+                def value = parts[1].trim()
+                systemProperty key, value
+            }
+        }
+    }
 }

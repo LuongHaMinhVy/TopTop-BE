@@ -122,15 +122,14 @@ public class JwtService {
     public boolean isTokenValid(String token) {
         String hash = DigestUtils.sha256Hex(token);
         return isTokenExpired(token)
-                && blacklistedTokenRepo.existsByTokenHash(hash);
+                && !blacklistedTokenRepo.existsByTokenHash(hash);
     }
 
     public boolean isTokenValid(String token, User user) {
         String hash = DigestUtils.sha256Hex(token);
-
         return user.getEmail().equals(extractUsername(token))
                 && isTokenExpired(token)
-                && blacklistedTokenRepo.existsByTokenHash(hash);
+                && !blacklistedTokenRepo.existsByTokenHash(hash);
     }
 
     public boolean isAccessTokenValid(String token) {

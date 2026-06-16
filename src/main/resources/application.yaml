@@ -1,7 +1,35 @@
 spring:
+  main:
+    lazy-initialization: true
   application:
     name: back
-
+  security:
+    oauth2:
+      client:
+        registration:
+          google:
+            clientId: ${GOOGLE_CLIENT_ID}
+            clientSecret: ${GOOGLE_CLIENT_SECRET}
+            redirectUri: ${GOOGLE_REDIRECT_URI:{baseUrl}/login/oauth2/code/{registrationId}}
+            scope:
+              - email
+              - profile
+          facebook:
+            client-id: ${FACEBOOK_APP_ID}
+            client-secret: ${FACEBOOK_APP_SECRET}
+            scope:
+              - email
+              - public_profile
+        provider:
+          facebook:
+            authorization-uri: https://www.facebook.com/v18.0/dialog/oauth
+            token-uri: https://graph.facebook.com/v18.0/oauth/access_token
+            user-info-uri: https://graph.facebook.com/me?fields=id,name,email,picture
+            user-name-attribute: id
+  servlet:
+    multipart:
+      max-file-size: ${MAX_FILE_SIZE}
+      max-request-size: ${MAX_REQUEST_SIZE}
   datasource:
     url: ${DB_URL}
     username: ${DB_USERNAME}
@@ -10,11 +38,16 @@ spring:
 
   jpa:
     hibernate:
-      ddl-auto: update
-    show-sql: true
+      ddl-auto: validate
+    show-sql: false
     properties:
       hibernate:
-        format_sql: true
+        format_sql: false
+
+  logging:
+    level:
+      org.springframework.security: INFO
+      org.hibernate.SQL: WARN
 
   cache:
     type: redis
@@ -35,10 +68,14 @@ spring:
     redis:
       host: ${REDIS_HOST}
       port: ${REDIS_PORT}
+      password: ${REDIS_PASSWORD}
       timeout: ${REDIS_TIMEOUT}
+      ssl:
+        enabled: true
 
 server:
   port: 8080
+  forward-headers-strategy: framework
 
 
 jwt:
@@ -47,7 +84,8 @@ jwt:
   refresh-token-expiration: ${REFRESH_TOKEN_EXPIRATION_TIME}
 
 frontend:
-  url: ${FRONTEND_URL}
+  urls: ${FRONTEND_URLS:${CORS_ALLOWED_ORIGINS:http://localhost:3000,http://localhost:3001,http://localhost:3002,http://127.0.0.1:3000,http://127.0.0.1:3001,http://127.0.0.1:3002,http://26.87.198.178:3000,http://26.87.198.178:3001,http://26.87.198.178:3002}}
+
 
 springdoc:
   api-docs:
@@ -60,5 +98,80 @@ logging:
     org.springframework.security: DEBUG
     org.hibernate.SQL: DEBUG
 
-cors:
-  allowed-origins: ${CORS_ALLOWED_ORIGINS}
+cloudflare:
+  r2:
+    account-id: ${R2_ACCOUNT_ID}
+    access-key: ${R2_ACCESS_KEY}
+    secret-key: ${R2_SECRET_KEY}
+    bucket-name: ${R2_BUCKET_NAME}
+    endpoint: ${R2_ENDPOINT}
+    public-url: ${R2_PUBLIC_URL}
+
+moderation:
+  auto-approve-threshold: 0.35
+  auto-reject-threshold: 0.85
+  text:
+    auto-reject-threshold: 0.35
+  frame-sampling:
+    max-frames: 8
+
+ai:
+  gemini:
+    enabled: ${GEMINI_ENABLED:true}
+    recommendations-enabled: ${GEMINI_RECOMMENDATIONS_ENABLED:true}
+    api-key: ${GEMINI_API_KEY:}
+    model: ${GEMINI_MODEL:gemini-2.5-flash}
+    endpoint: ${GEMINI_ENDPOINT:https://generativelanguage.googleapis.com/v1beta}
+
+acrcloud:
+  enabled: ${ACRCLOUD_ENABLED:false}
+  access-key: ${ACRCLOUD_ACCESS_KEY:}
+  access-secret: ${ACRCLOUD_ACCESS_SECRET:${ACRCLOUD_SECRET_KEY:}}
+  host: ${ACRCLOUD_HOST:}
+
+ffmpeg:
+  path: ${FFMPEG_PATH:ffmpeg}
+  max-frames: ${FFMPEG_MAX_FRAMES:5}
+
+livekit:
+  url: ${LIVEKIT_URL}
+  api-key: ${LIVEKIT_API_KEY}
+  api-secret: ${LIVEKIT_API_SECRET}
+
+payment:
+  default-currency: VND
+  success-path: /payment/success
+  cancel-path: /payment/cancel
+  paypal-success-path: /payment/paypal/success
+
+stripe:
+  secret-key: ${STRIPE_SECRET_KEY:}
+  webhook-secret: ${STRIPE_WEBHOOK_SECRET:}
+  currency: vnd
+
+paypal:
+  mode: ${PAYPAL_MODE:sandbox}
+  client-id: ${PAYPAL_CLIENT_ID:}
+  client-secret: ${PAYPAL_CLIENT_SECRET:}
+  base-url: ${PAYPAL_BASE_URL:https://api-m.sandbox.paypal.com}
+  currency: USD
+  vnd-to-usd-rate: ${PAYPAL_VND_TO_USD_RATE:25000}
+
+search:
+  opensearch:
+    enabled: ${OPENSEARCH_ENABLED:false}
+    index-on-startup: ${OPENSEARCH_INDEX_ON_STARTUP:false}
+    url: ${OPENSEARCH_URL:http://localhost:9200}
+    index-name: ${OPENSEARCH_INDEX_NAME:toptop_search}
+    username: ${OPENSEARCH_USERNAME:}
+    password: ${OPENSEARCH_PASSWORD:}
+
+langchain4j:
+  google-ai-gemini:
+    chat-model:
+      api-key: ${GEMINI_API_KEY:}
+      model-name: gemini-2.5-flash
+      temperature: 0.2
+      timeout: 60s
+      log-requests: true
+      log-responses: true

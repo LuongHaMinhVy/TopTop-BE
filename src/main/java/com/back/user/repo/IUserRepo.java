@@ -1,15 +1,16 @@
 package com.back.user.repo;
 
 import com.back.user.model.entity.User;
-import jakarta.validation.constraints.Email;
-import jakarta.validation.constraints.NotBlank;
-import jakarta.validation.constraints.Pattern;
-import jakarta.validation.constraints.Size;
-import org.jspecify.annotations.NonNull;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.Query;
+import org.springframework.data.repository.query.Param;
 import org.springframework.stereotype.Repository;
 
 import java.util.Optional;
+import java.time.LocalDateTime;
+import java.util.List;
 
 @Repository
 public interface IUserRepo extends JpaRepository<User, Long>{
@@ -19,5 +20,195 @@ public interface IUserRepo extends JpaRepository<User, Long>{
 
     boolean existsByEmail(String email);
 
+    List<User> findByDeletionScheduledAtIsNotNullAndDeletionScheduledAtBefore(LocalDateTime cutoff);
+
     Optional<User> findByUsername(String usernameOrEmail);
+
+    @Query("""
+            SELECT u FROM User u
+            WHERE u.username = :username
+              AND u.deletedAt IS NULL
+              AND LOWER(u.username) <> 'admin'
+              AND NOT EXISTS (
+                  SELECT r.id FROM u.roles r
+                  WHERE r.name = com.back.user.model.enums.RoleName.ROLE_ADMIN
+              )
+            """)
+    Optional<User> findPublicUserByUsername(@Param("username") String username);
+
+    @Query("""
+            SELECT u FROM User u
+            WHERE LOWER(u.username) <> 'admin'
+              AND u.deletedAt IS NULL
+              AND NOT EXISTS (
+                  SELECT r.id FROM u.roles r
+                  WHERE r.name = com.back.user.model.enums.RoleName.ROLE_ADMIN
+              )
+            ORDER BY u.createdAt DESC
+            """)
+    java.util.List<User> findRecentPublicUsers(Pageable pageable);
+
+    @Query("""
+            SELECT u FROM User u
+            WHERE (
+                  LOWER(u.username) LIKE LOWER(CONCAT('%', :keyword, '%'))
+               OR LOWER(u.nickname) LIKE LOWER(CONCAT('%', :keyword, '%'))
+            )
+              AND u.deletedAt IS NULL
+              AND LOWER(u.username) <> 'admin'
+              AND NOT EXISTS (
+                  SELECT r.id FROM u.roles r
+                  WHERE r.name = com.back.user.model.enums.RoleName.ROLE_ADMIN
+              )
+            ORDER BY
+               CASE WHEN LOWER(u.username) = LOWER(:keyword) THEN 0 ELSE 1 END,
+               CASE WHEN LOWER(u.username) LIKE LOWER(CONCAT(:keyword, '%')) THEN 0 ELSE 1 END,
+               u.verified DESC,
+               u.followersCount DESC,
+               u.totalLikes DESC
+            """)
+    java.util.List<User> findPublicMentionSuggestions(@Param("keyword") String keyword, Pageable pageable);
+
+    @Query("""
+            SELECT u FROM User u
+            WHERE (
+                  LOWER(u.username) LIKE LOWER(CONCAT('%', :keyword, '%'))
+              OR LOWER(u.nickname) LIKE LOWER(CONCAT('%', :keyword, '%'))
+            )
+              AND u.deletedAt IS NULL
+              AND LOWER(u.username) <> 'admin'
+              AND NOT EXISTS (
+                  SELECT r.id FROM u.roles r
+                  WHERE r.name = com.back.user.model.enums.RoleName.ROLE_ADMIN
+              )
+            ORDER BY
+               CASE WHEN LOWER(u.username) = LOWER(:keyword) THEN 0 ELSE 1 END,
+               CASE WHEN LOWER(u.username) LIKE LOWER(CONCAT(:keyword, '%')) THEN 0 ELSE 1 END,
+               u.verified DESC,
+               u.followersCount DESC,
+               u.totalLikes DESC
+            """)
+    Page<User> searchUsers(@Param("keyword") String keyword, Pageable pageable);
+
+    @Query("""
+            SELECT u FROM User u
+            WHERE u.id IN :ids
+              AND u.deletedAt IS NULL
+              AND LOWER(u.username) <> 'admin'
+              AND NOT EXISTS (
+                  SELECT r.id FROM u.roles r
+                  WHERE r.name = com.back.user.model.enums.RoleName.ROLE_ADMIN
+              )
+            """)
+    List<User> findPublicSearchUsersByIds(@Param("ids") List<Long> ids);
+
+    @Query("""
+            SELECT u FROM User u
+            WHERE u.deletedAt IS NULL
+              AND LOWER(u.username) <> 'admin'
+              AND NOT EXISTS (
+                  SELECT r.id FROM u.roles r
+                  WHERE r.name = com.back.user.model.enums.RoleName.ROLE_ADMIN
+              )
+            """)
+    List<User> findSearchIndexUsers();
+
+    @Query("""
+            SELECT u FROM User u
+            WHERE (:viewerId IS NULL OR u.id <> :viewerId)
+              AND u.deletedAt IS NULL
+              AND LOWER(u.username) <> 'admin'
+              AND NOT EXISTS (
+                  SELECT r.id FROM u.roles r
+                  WHERE r.name = com.back.user.model.enums.RoleName.ROLE_ADMIN
+              )
+              AND (:viewerId IS NULL OR NOT EXISTS (
+                  SELECT f.id FROM Follow f
+                  WHERE f.follower.id = :viewerId AND f.following.id = u.id
+              ))
+              AND (:viewerId IS NULL OR NOT EXISTS (
+                  SELECT b.id FROM UserBlock b
+                  WHERE (b.blocker.id = :viewerId AND b.blocked = u)
+                     OR (b.blocked.id = :viewerId AND b.blocker = u)
+              ))
+            ORDER BY u.followersCount DESC, u.totalLikes DESC
+            """)
+    Page<User> findSuggestedUsersToFollow(@Param("viewerId") Long viewerId, Pageable pageable);
+
+    @Query("""
+            SELECT u FROM User u
+            WHERE u.id <> :viewerId
+              AND u.deletedAt IS NULL
+              AND LOWER(u.username) <> 'admin'
+              AND NOT EXISTS (
+                  SELECT r.id FROM u.roles r
+                  WHERE r.name = com.back.user.model.enums.RoleName.ROLE_ADMIN
+              )
+              AND NOT EXISTS (
+                  SELECT f.id FROM Follow f
+                  WHERE f.follower.id = :viewerId AND f.following.id = u.id
+              )
+              AND NOT EXISTS (
+                  SELECT b.id FROM UserBlock b
+                  WHERE (b.blocker.id = :viewerId AND b.blocked = u)
+                     OR (b.blocked.id = :viewerId AND b.blocker = u)
+              )
+            ORDER BY 
+              CASE WHEN EXISTS (
+                  SELECT f2.id FROM Follow f2
+                  WHERE f2.follower.id = u.id AND f2.following.id = :viewerId
+              ) THEN 0 ELSE 1 END ASC,
+              u.followersCount DESC, 
+              u.totalLikes DESC
+            """)
+    Page<User> findSuggestedFriends(@Param("viewerId") Long viewerId, Pageable pageable);
+
+    @Query("""
+            SELECT u FROM User u
+            WHERE LOWER(u.username) <> 'admin'
+              AND u.deletedAt IS NULL
+              AND NOT EXISTS (
+                  SELECT r.id FROM u.roles r
+                  WHERE r.name = com.back.user.model.enums.RoleName.ROLE_ADMIN
+              )
+            ORDER BY u.createdAt DESC
+            """)
+    Page<User> findAllPublicUsersPage(Pageable pageable);
+
+    @Query("""
+            SELECT u FROM User u
+            WHERE (
+                  LOWER(u.username) LIKE LOWER(CONCAT('%', :keyword, '%'))
+               OR LOWER(u.nickname)  LIKE LOWER(CONCAT('%', :keyword, '%'))
+               OR LOWER(u.email)     LIKE LOWER(CONCAT('%', :keyword, '%'))
+            )
+              AND u.deletedAt IS NULL
+              AND LOWER(u.username) <> 'admin'
+              AND NOT EXISTS (
+                  SELECT r.id FROM u.roles r
+                  WHERE r.name = com.back.user.model.enums.RoleName.ROLE_ADMIN
+              )
+            ORDER BY u.createdAt DESC
+            """)
+    Page<User> adminSearchUsers(@Param("keyword") String keyword, Pageable pageable);
+
+    @Query("""
+            SELECT u FROM User u
+            WHERE (:keyword IS NULL OR :keyword = '' OR (
+                  LOWER(u.username) LIKE LOWER(CONCAT('%', :keyword, '%'))
+               OR LOWER(u.nickname) LIKE LOWER(CONCAT('%', :keyword, '%'))
+               OR LOWER(u.email) LIKE LOWER(CONCAT('%', :keyword, '%'))
+            ))
+              AND (:status IS NULL OR u.status = :status)
+              AND LOWER(u.username) <> 'admin'
+              AND NOT EXISTS (
+                  SELECT r.id FROM u.roles r
+                  WHERE r.name = com.back.user.model.enums.RoleName.ROLE_ADMIN
+              )
+            ORDER BY u.createdAt DESC
+            """)
+    Page<User> adminFindUsers(
+            @Param("keyword") String keyword,
+            @Param("status") com.back.user.model.enums.UserStatus status,
+            Pageable pageable);
 }

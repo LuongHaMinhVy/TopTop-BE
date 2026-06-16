@@ -8,14 +8,18 @@ import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
 
 public interface IAuthService{
-    AuthResult login(LoginRequest loginRequest);
+
+    AuthResult login(LoginRequest loginRequest, HttpServletResponse response, HttpServletRequest request);
+
+    AuthResponse reactivateAccount(HttpServletRequest request, HttpServletResponse response);
 
     void logout(HttpServletRequest request, HttpServletResponse response);
 
-    AuthResult register(RegisterRequest registerRequest);
+    void register(RegisterRequest registerRequest);
     void verifyEmail(String token);
     void resendVerification(String email);
     void forgotPassword(String email);
     void resetPassword(String token, String newPassword);
-    AuthResponse refreshToken(String authHeader);
+    AuthResponse refreshToken(HttpServletRequest request, HttpServletResponse response);
+    AuthResponse onboardOAuth2(com.back.auth.model.dto.request.OAuth2OnboardRequest request, HttpServletRequest servletRequest, HttpServletResponse servletResponse);
 }

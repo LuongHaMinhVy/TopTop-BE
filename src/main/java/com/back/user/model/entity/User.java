@@ -1,11 +1,15 @@
 package com.back.user.model.entity;
 
 import com.back.common.model.entity.BaseEntity;
+import com.back.user.model.enums.AccountType;
+import com.back.user.model.enums.Gender;
+import com.back.user.model.enums.UserStatus;
 import jakarta.persistence.*;
 import lombok.*;
 import lombok.experimental.SuperBuilder;
 
 import java.time.LocalDate;
+import java.time.LocalDateTime;
 import java.util.Set;
 
 @Entity
@@ -58,10 +62,6 @@ public class User extends BaseEntity {
 
     @Builder.Default
     @Column(nullable = false)
-    private Long videoCount = 0L;
-
-    @Builder.Default
-    @Column(nullable = false)
     private Boolean verified = false;
 
     @Builder.Default
@@ -71,6 +71,9 @@ public class User extends BaseEntity {
     @Builder.Default
     @Column(nullable = false)
     private UserStatus status = UserStatus.ACTIVE;
+
+    @Column(name = "status_reason", length = 500)
+    private String statusReason;
 
     @Column(length = 500)
     private String websiteUrl;
@@ -115,7 +118,33 @@ public class User extends BaseEntity {
     @Column(nullable = false)
     private Boolean allowMessageFromEveryone = false;
 
-    @ManyToMany(fetch = FetchType.LAZY)
+    @Builder.Default
+    @Column(nullable = false, columnDefinition = "boolean default true")
+    private Boolean showPosts = true;
+
+    @Builder.Default
+    @Column(nullable = false, columnDefinition = "boolean default true")
+    private Boolean showReposts = true;
+
+    @Builder.Default
+    @Column(nullable = false, columnDefinition = "boolean default false")
+    private Boolean showLikedVideos = false;
+
+    @Builder.Default
+    @Column(nullable = false, columnDefinition = "boolean default false")
+    private Boolean showFavorites = false;
+
+    @Builder.Default
+    @Column(nullable = false)
+    private Boolean onboarded = true;
+
+    @Column(name = "deleted_at")
+    private LocalDateTime deletedAt;
+
+    @Column(name = "deletion_scheduled_at")
+    private LocalDateTime deletionScheduledAt;
+
+    @ManyToMany(fetch = FetchType.EAGER)
     @JoinTable(
             name = "user_roles",
             joinColumns = @JoinColumn(name = "user_id"),

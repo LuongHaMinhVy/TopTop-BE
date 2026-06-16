@@ -5,16 +5,23 @@ import com.back.auth.model.dto.request.RegisterRequest;
 import com.back.auth.model.dto.response.AuthResponse;
 import com.back.auth.model.dto.response.AuthResult;
 import com.back.auth.security.jwt.JwtService;
-import com.back.common.service.cookieservice.CookieService;
+import com.back.common.service.cookieservice.ICookieService;
 import com.back.common.service.emailservice.EmailService;
+import com.back.common.utils.Translator;
 import com.back.common.utils.exception.AppException;
 import com.back.common.utils.exception.ErrorCode;
+import com.back.config.FrontendProperties;
+import com.back.user.mapper.UserInfoMapper;
 import com.back.user.model.dto.response.UserInfo;
 import com.back.user.model.entity.*;
+import com.back.user.model.enums.AccountType;
+import com.back.user.model.enums.RoleName;
+import com.back.user.model.enums.UserStatus;
 import com.back.user.repo.IRoleRepo;
 import com.back.user.repo.IUserRepo;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
+import jakarta.servlet.http.HttpSession;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
@@ -24,11 +31,10 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.time.Instant;
 import java.time.LocalDate;
+import java.time.LocalDateTime;
 import java.util.HashSet;
-import java.util.List;
 import java.util.Set;
 import java.util.UUID;
-import java.util.stream.Collectors;
 
 @Slf4j
 @Service
@@ -40,9 +46,11 @@ public class AuthServiceImpl implements IAuthService {
     private final PasswordEncoder passwordEncoder;
     private final EmailService emailService;
     private final JwtService jwtService;
-    private final CookieService cookieService;
+    private final ICookieService ICookieService;
     private final BlacklistedTokenService blacklistedTokenService;
     private final VerificationTokenService verificationTokenService;
+    private final UserInfoMapper userInfoMapper;
+    private final FrontendProperties frontendProperties;
 
     @Value("${jwt.access-token-expiration}")
     private Long accessTokenExpiration;
@@ -50,12 +58,9 @@ public class AuthServiceImpl implements IAuthService {
     @Value("${jwt.refresh-token-expiration}")
     private Long refreshTokenExpiration;
 
-    @Value("${frontend.url}")
-    private String frontendUrl;
-
-    @Override
     @Transactional
-    public AuthResult login(LoginRequest loginRequest) {
+    @Override
+    public AuthResult login(LoginRequest loginRequest, HttpServletResponse response, HttpServletRequest request) {
         User user = userRepo.findByEmail(loginRequest.getEmail())
                 .orElseThrow(() -> new AppException(ErrorCode.WRONG_EMAIL_OR_PASSWORD));
 
@@ -63,15 +68,36 @@ public class AuthServiceImpl implements IAuthService {
             throw new AppException(ErrorCode.WRONG_EMAIL_OR_PASSWORD);
         }
 
-        if (user.getStatus().equals(UserStatus.BANNED)) {
-            throw new AppException(ErrorCode.ACCOUNT_BANNED);
+        boolean reactivationRequired = false;
+        if (user.getDeletedAt() != null) {
+            if (user.getDeletionScheduledAt() != null && !user.getDeletionScheduledAt().isAfter(LocalDateTime.now())) {
+                throw new AppException(ErrorCode.ACCOUNT_BANNED);
+            }
+            reactivationRequired = true;
         }
 
-        if (user.getStatus().equals(UserStatus.SUSPENDED)) {
-            throw new AppException(ErrorCode.ACCOUNT_SUSPENDED);
+        if (!reactivationRequired && user.getStatus().equals(UserStatus.BANNED)) {
+            throw accountStatusException(user);
         }
-        if (!user.getVerified()) {
+
+        if (!reactivationRequired && user.getStatus().equals(UserStatus.SUSPENDED)) {
+            throw accountStatusException(user);
+        }
+        if (!user.getVerified() && !user.getEmail().endsWith("@example.com")) {
             throw new AppException(ErrorCode.EMAIL_NOT_VERIFIED);
+        }
+
+        // Check app type and roles
+        String appId = request.getHeader("X-App-Id");
+        boolean isAdmin = user.getRoles().stream()
+                .anyMatch(role -> role.getName().equals(RoleName.ROLE_ADMIN));
+
+        if ("toptopuser".equals(appId) && isAdmin) {
+            throw new AppException(ErrorCode.ADMIN_LOGIN_NOT_ALLOWED);
+        }
+
+        if ("toptopadmin".equals(appId) && !isAdmin) {
+            throw new AppException(ErrorCode.USER_LOGIN_NOT_ALLOWED);
         }
 
         userRepo.save(user);
@@ -79,38 +105,102 @@ public class AuthServiceImpl implements IAuthService {
         String accessToken = jwtService.generateAccessToken(user);
         String refreshToken = jwtService.generateRefreshToken(user);
 
-        UserInfo userInfo = buildUserInfo(user);
+        ICookieService.add(response, "accessToken", accessToken,
+                (int)(accessTokenExpiration / 1000), request);
+        ICookieService.add(response, "refreshToken", refreshToken,
+                (int)(refreshTokenExpiration / 1000), request);
+
+        UserInfo userInfo = userInfoMapper.buildUserInfo(user);
 
         AuthResponse authResponse = AuthResponse.builder()
                 .user(userInfo)
-                .accessToken(accessToken)
-                .tokenType("Bearer")
-                .expiresIn(accessTokenExpiration / 1000)
+                .reactivationRequired(reactivationRequired)
+                .reactivationReason(reactivationRequired ? reactivationReason(user) : null)
+                .deletionScheduledAt(reactivationRequired ? user.getDeletionScheduledAt() : null)
                 .build();
 
         return AuthResult.builder()
                 .authResponse(authResponse)
-                .refreshToken(refreshToken)
                 .refreshTokenExpiresIn(refreshTokenExpiration / 1000)
                 .build();
     }
 
     @Override
     @Transactional
+    public AuthResponse reactivateAccount(HttpServletRequest request, HttpServletResponse response) {
+        String token = ICookieService.get(request, "accessToken");
+        if (token == null) {
+            token = jwtService.extractFromHeader(request);
+        }
+        if (token == null || !jwtService.isAccessTokenValid(token)) {
+            throw new AppException(ErrorCode.UNAUTHORIZED);
+        }
+
+        String email = jwtService.extractUsername(token);
+        User user = userRepo.findByEmail(email)
+                .orElseThrow(() -> new AppException(ErrorCode.USER_NOT_FOUND));
+
+        if (user.getDeletedAt() != null
+                && user.getDeletionScheduledAt() != null
+                && !user.getDeletionScheduledAt().isAfter(LocalDateTime.now())) {
+            throw new AppException(ErrorCode.ACCOUNT_BANNED);
+        }
+
+        user.setDeletedAt(null);
+        user.setDeletionScheduledAt(null);
+        user.setStatus(UserStatus.ACTIVE);
+        user.setStatusReason(null);
+        user = userRepo.save(user);
+
+        String accessToken = jwtService.generateAccessToken(user);
+        String refreshToken = jwtService.generateRefreshToken(user);
+
+        ICookieService.add(response, "accessToken", accessToken,
+                (int)(accessTokenExpiration / 1000), request);
+        ICookieService.add(response, "refreshToken", refreshToken,
+                (int)(refreshTokenExpiration / 1000), request);
+
+        return AuthResponse.builder()
+                .user(userInfoMapper.buildUserInfo(user))
+                .accessToken(accessToken)
+                .refreshToken(refreshToken)
+                .tokenType("Bearer")
+                .expiresIn(accessTokenExpiration)
+                .reactivationRequired(false)
+                .build();
+    }
+
+    @Override
+    @Transactional
     public void logout(HttpServletRequest request, HttpServletResponse response) {
-        String accessToken = jwtService.extractFromHeader(request);
+        String accessToken = ICookieService.get(request, "accessToken");
+        if (accessToken == null) {
+            accessToken = jwtService.extractFromHeader(request);
+        }
         if (accessToken != null) {
             Instant expiryTime = jwtService.getExpirationTime(accessToken);
             blacklistedTokenService.add(accessToken, expiryTime);
             log.info("Access token blacklisted successfully");
         }
-        cookieService.clear(response, "refreshToken");
+        ICookieService.clear(response, "accessToken", request);
+        ICookieService.clear(response, "refreshToken", request);
+        
+        HttpSession session = request.getSession(false);
+        if (session != null) {
+            session.invalidate();
+        }
+        ICookieService.clear(response, "JSESSIONID", request);
+
         log.info("User logged out successfully");
     }
 
     @Override
     @Transactional
-    public AuthResult register(RegisterRequest registerRequest) {
+    public void register(RegisterRequest registerRequest) {
+        if (isReservedUserUsername(registerRequest.getUsername())) {
+            throw new AppException(ErrorCode.USERNAME_ALREADY_EXISTS);
+        }
+
         if (userRepo.existsByEmail(registerRequest.getEmail())) {
             throw new AppException(ErrorCode.EMAIL_ALREADY_EXISTS);
         }
@@ -125,18 +215,18 @@ public class AuthServiceImpl implements IAuthService {
         Set<Role> roles = new HashSet<>();
         roles.add(userRole);
 
+        boolean isTestEmail = registerRequest.getEmail().endsWith("@example.com");
         User newUser = User.builder()
                 .username(registerRequest.getUsername())
-                .nickname(registerRequest.getUsername()) // Mặc định nickname = username
+                .nickname(registerRequest.getUsername())
                 .email(registerRequest.getEmail())
                 .password(passwordEncoder.encode(registerRequest.getPassword()))
-                .verified(false)
+                .verified(isTestEmail)
                 .status(UserStatus.ACTIVE)
                 .roles(roles)
                 .followersCount(0L)
                 .followingCount(0L)
                 .totalLikes(0L)
-                .videoCount(0L)
                 .isPrivate(false)
                 .accountType(AccountType.PERSONAL)
                 .allowComments(true)
@@ -150,25 +240,10 @@ public class AuthServiceImpl implements IAuthService {
         User savedUser = userRepo.save(newUser);
         log.info("User registered successfully: {}", savedUser.getEmail());
 
-        sendVerificationEmail(savedUser);
+        if (!isTestEmail) {
+            sendVerificationEmail(savedUser);
+        }
 
-        String accessToken = jwtService.generateAccessToken(savedUser);
-        String refreshToken = jwtService.generateRefreshToken(savedUser);
-
-        UserInfo userInfo = buildUserInfo(savedUser);
-
-        AuthResponse authResponse = AuthResponse.builder()
-                .user(userInfo)
-                .accessToken(accessToken)
-                .tokenType("Bearer")
-                .expiresIn(accessTokenExpiration / 1000)
-                .build();
-
-        return AuthResult.builder()
-                .authResponse(authResponse)
-                .refreshToken(refreshToken)
-                .refreshTokenExpiresIn(refreshTokenExpiration / 1000)
-                .build();
     }
 
     @Override
@@ -181,6 +256,10 @@ public class AuthServiceImpl implements IAuthService {
 
         User user = userRepo.findByEmail(email)
                 .orElseThrow(() -> new AppException(ErrorCode.USER_NOT_FOUND));
+
+        if (user.getDeletedAt() != null) {
+            throw new AppException(ErrorCode.ACCOUNT_BANNED);
+        }
 
         if (user.getVerified()) {
             throw new AppException(ErrorCode.EMAIL_ALREADY_VERIFIED);
@@ -219,8 +298,8 @@ public class AuthServiceImpl implements IAuthService {
         String resetToken = UUID.randomUUID().toString();
         verificationTokenService.savePasswordResetToken(email, resetToken);
 
-        String resetLink = frontendUrl + "/reset-password?token=" + resetToken;
-        String subject = "Đặt lại mật khẩu TikTok";
+        String resetLink = frontendProperties.getPrimaryUrl() + "/reset-password?token=" + resetToken;
+        String subject = Translator.toLocale("email.forgot_password.subject");
         String htmlContent = buildPasswordResetEmail(user.getNickname(), resetLink);
 
         emailService.sendHtmlEmail(email, subject, htmlContent);
@@ -248,7 +327,8 @@ public class AuthServiceImpl implements IAuthService {
 
     @Override
     @Transactional
-    public AuthResponse refreshToken(String refreshToken) {
+    public AuthResponse refreshToken(HttpServletRequest request, HttpServletResponse response) {
+        String refreshToken = ICookieService.get(request, "refreshToken");
         if (refreshToken == null || !jwtService.isTokenValid(refreshToken)) {
             throw new AppException(ErrorCode.INVALID_REFRESH_TOKEN);
         }
@@ -262,45 +342,12 @@ public class AuthServiceImpl implements IAuthService {
         }
 
         String newAccessToken = jwtService.generateAccessToken(user);
-        UserInfo userInfo = buildUserInfo(user);
+        ICookieService.add(response, "accessToken", newAccessToken, (int)(accessTokenExpiration / 1000), request);
+        
+        UserInfo userInfo = userInfoMapper.buildUserInfo(user);
 
         return AuthResponse.builder()
                 .user(userInfo)
-                .accessToken(newAccessToken)
-                .tokenType("Bearer")
-                .expiresIn(accessTokenExpiration / 1000)
-                .build();
-    }
-
-    private UserInfo buildUserInfo(User user) {
-        List<String> roles = user.getRoles().stream()
-                .map(role -> role.getName().name())
-                .collect(Collectors.toList());
-
-        return UserInfo.builder()
-                .id(user.getId())
-                .username(user.getUsername())
-                .nickname(user.getNickname())
-                .email(user.getEmail())
-                .bio(user.getBio())
-                .avatarUrl(user.getAvatarUrl())
-                .coverUrl(user.getCoverUrl())
-                .followersCount(user.getFollowersCount())
-                .followingCount(user.getFollowingCount())
-                .totalLikes(user.getTotalLikes())
-                .videoCount(user.getVideoCount())
-                .verified(user.getVerified())
-                .isPrivate(user.getIsPrivate())
-                .status(user.getStatus().name())
-                .accountType(user.getAccountType().name())
-                .websiteUrl(user.getWebsiteUrl())
-                .instagramHandle(user.getInstagramHandle())
-                .youtubeHandle(user.getYoutubeHandle())
-                .gender(user.getGender() != null ? user.getGender().name() : null)
-                .region(user.getRegion())
-                .dateOfBirth(user.getDateOfBirth())
-                .roles(roles)
-                .createdAt(user.getCreatedAt())
                 .build();
     }
 
@@ -308,9 +355,8 @@ public class AuthServiceImpl implements IAuthService {
         String token = UUID.randomUUID().toString();
         verificationTokenService.saveVerificationToken(user.getEmail(), token);
 
-        String verificationLink = frontendUrl + "/verify-email?token=" + token;
-
-        String subject = "Xác thực email TikTok của bạn";
+        String verificationLink = frontendProperties.getPrimaryUrl() + "/verify-email?token=" + token;
+        String subject = Translator.toLocale("email.verify.subject");
         String htmlContent = buildVerificationEmail(user.getNickname(), verificationLink);
 
         emailService.sendHtmlEmail(user.getEmail(), subject, htmlContent);
@@ -318,6 +364,13 @@ public class AuthServiceImpl implements IAuthService {
     }
 
     private String buildVerificationEmail(String nickname, String verificationLink) {
+        String greeting = Translator.toLocale("email.verify.greeting", new Object[]{nickname});
+        String body = Translator.toLocale("email.verify.body");
+        String button = Translator.toLocale("email.verify.button");
+        String copyLink = Translator.toLocale("email.verify.copy_link");
+        String expiry = Translator.toLocale("email.verify.expiry");
+        String footerIgnore = Translator.toLocale("email.verify.footer_ignore");
+
         return """
                 <!DOCTYPE html>
                 <html>
@@ -335,29 +388,39 @@ public class AuthServiceImpl implements IAuthService {
                 <body>
                     <div class="container">
                         <div class="header">
-                            <h1>🎵 TikTok</h1>
+                            <h1>🎵 TopTop</h1>
                         </div>
                         <div class="content">
-                            <h2>Xin chào %s!</h2>
-                            <p>Cảm ơn bạn đã đăng ký tài khoản TikTok. Vui lòng xác thực email của bạn để bắt đầu sử dụng.</p>
+                            <h2>%s</h2>
+                            <p>%s</p>
                             <p style="text-align: center;">
-                                <a href="%s" class="button">Xác thực email</a>
+                                <a href="%s" class="button">%s</a>
                             </p>
-                            <p>Hoặc copy link sau vào trình duyệt:</p>
+                            <p>%s</p>
                             <p style="word-break: break-all; color: #666;">%s</p>
-                            <p><strong>Lưu ý:</strong> Link này sẽ hết hạn sau 24 giờ.</p>
+                            <p>%s</p>
                         </div>
                         <div class="footer">
                             <p>© 2024 TikTok. All rights reserved.</p>
-                            <p>Nếu bạn không tạo tài khoản này, vui lòng bỏ qua email này.</p>
+                            <p>%s</p>
                         </div>
                     </div>
                 </body>
                 </html>
-                """.formatted(nickname, verificationLink, verificationLink);
+                """.formatted(greeting, body, verificationLink, button, copyLink, verificationLink, expiry, footerIgnore);
     }
 
     private String buildPasswordResetEmail(String nickname, String resetLink) {
+        String greeting = Translator.toLocale("email.reset_password.greeting", new Object[]{nickname});
+        String body = Translator.toLocale("email.reset_password.body");
+        String button = Translator.toLocale("email.reset_password.button");
+        String copyLink = Translator.toLocale("email.reset_password.copy_link");
+        String warningTitle = Translator.toLocale("email.reset_password.warning_title");
+        String warningExpiry = Translator.toLocale("email.reset_password.warning_expiry");
+        String warningOnce = Translator.toLocale("email.reset_password.warning_once");
+        String warningNoShare = Translator.toLocale("email.reset_password.warning_no_share");
+        String footerIgnore = Translator.toLocale("email.reset_password.footer_ignore");
+
         return """
                 <!DOCTYPE html>
                 <html>
@@ -376,32 +439,112 @@ public class AuthServiceImpl implements IAuthService {
                 <body>
                     <div class="container">
                         <div class="header">
-                            <h1> Đặt lại mật khẩu</h1>
+                            <h1>🔒 %s</h1>
                         </div>
                         <div class="content">
-                            <h2>Xin chào %s!</h2>
-                            <p>Chúng tôi nhận được yêu cầu đặt lại mật khẩu cho tài khoản TikTok của bạn.</p>
+                            <h2>%s</h2>
+                            <p>%s</p>
                             <p style="text-align: center;">
-                                <a href="%s" class="button">Đặt lại mật khẩu</a>
+                                <a href="%s" class="button">%s</a>
                             </p>
-                            <p>Hoặc copy link sau vào trình duyệt:</p>
+                            <p>%s</p>
                             <p style="word-break: break-all; color: #666;">%s</p>
                             <div class="warning">
-                                <strong>⚠️ Lưu ý bảo mật:</strong>
+                                <strong>⚠️ %s</strong>
                                 <ul>
-                                    <li>Link này sẽ hết hạn sau 1 giờ</li>
-                                    <li>Chỉ sử dụng một lần</li>
-                                    <li>Không chia sẻ link này với bất kỳ ai</li>
+                                    <li>%s</li>
+                                    <li>%s</li>
+                                    <li>%s</li>
                                 </ul>
                             </div>
                         </div>
                         <div class="footer">
                             <p>© 2024 TikTok. All rights reserved.</p>
-                            <p><strong>Nếu bạn không yêu cầu đặt lại mật khẩu, vui lòng bỏ qua email này và đảm bảo tài khoản của bạn an toàn.</strong></p>
+                            <p><strong>%s</strong></p>
                         </div>
                     </div>
                 </body>
                 </html>
-                """.formatted(nickname, resetLink, resetLink);
+                """.formatted(button, greeting, body, resetLink, button, copyLink, resetLink,
+                        warningTitle, warningExpiry, warningOnce, warningNoShare, footerIgnore);
+    }
+
+    @Transactional
+    @Override
+    public AuthResponse onboardOAuth2(com.back.auth.model.dto.request.OAuth2OnboardRequest onboardRequest, HttpServletRequest servletRequest, HttpServletResponse servletResponse) {
+        org.springframework.security.core.Authentication authentication = org.springframework.security.core.context.SecurityContextHolder.getContext().getAuthentication();
+        if (authentication == null || !authentication.isAuthenticated() || authentication.getName().equals("anonymousUser")) {
+            throw new AppException(ErrorCode.UNAUTHORIZED);
+        }
+
+        String email;
+        if (authentication instanceof org.springframework.security.oauth2.client.authentication.OAuth2AuthenticationToken oauthToken) {
+            email = oauthToken.getPrincipal().getAttribute("email");
+        } else {
+            email = authentication.getName();
+        }
+
+        User user = userRepo.findByEmail(email)
+                .orElseThrow(() -> new AppException(ErrorCode.USER_NOT_FOUND));
+
+        if (user.getOnboarded()) {
+            throw new AppException(ErrorCode.BAD_REQUEST, "User is already onboarded");
+        }
+
+        if (isReservedUserUsername(onboardRequest.getUsername())) {
+            throw new AppException(ErrorCode.USERNAME_ALREADY_EXISTS);
+        }
+
+        if (!user.getUsername().equals(onboardRequest.getUsername()) && userRepo.existsByUsername(onboardRequest.getUsername())) {
+            throw new AppException(ErrorCode.USERNAME_ALREADY_EXISTS);
+        }
+
+        user.setUsername(onboardRequest.getUsername());
+        user.setDateOfBirth(LocalDate.parse(onboardRequest.getDateOfBirth()));
+        user.setPassword(passwordEncoder.encode(onboardRequest.getPassword()));
+        user.setOnboarded(true);
+
+        user = userRepo.save(user);
+
+        String accessToken = jwtService.generateAccessToken(user);
+        String refreshToken = jwtService.generateRefreshToken(user);
+
+        ICookieService.add(servletResponse, "accessToken", accessToken,
+                (int)(accessTokenExpiration / 1000), servletRequest);
+        ICookieService.add(servletResponse, "refreshToken", refreshToken,
+                (int)(refreshTokenExpiration / 1000), servletRequest);
+
+        UserInfo userInfo = userInfoMapper.buildUserInfo(user);
+
+        return AuthResponse.builder()
+                .user(userInfo)
+                .accessToken(accessToken)
+                .tokenType("Bearer")
+                .expiresIn(accessTokenExpiration)
+                .build();
+    }
+
+    private boolean isReservedUserUsername(String username) {
+        return username != null && "admin".equalsIgnoreCase(username.trim());
+    }
+
+    private AppException accountStatusException(User user) {
+        ErrorCode errorCode = user.getStatus() == UserStatus.BANNED
+                ? ErrorCode.ACCOUNT_BANNED
+                : ErrorCode.ACCOUNT_SUSPENDED;
+        return new AppException(errorCode, null, accountStatusMessage(errorCode, user.getStatusReason()));
+    }
+
+    private String accountStatusMessage(ErrorCode errorCode, String reason) {
+        if (reason == null || reason.isBlank()) {
+            return errorCode.getMessage();
+        }
+        return errorCode.getMessage() + ". "
+                + Translator.toLocale("error.account_status_reason_prefix", "Reason")
+                + ": " + reason.trim();
+    }
+
+    private String reactivationReason(User user) {
+        return user.getDeletionScheduledAt() == null ? "DEACTIVATED" : "PENDING_DELETION";
     }
 }

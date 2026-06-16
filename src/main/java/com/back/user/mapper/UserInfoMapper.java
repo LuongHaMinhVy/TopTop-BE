@@ -1,0 +1,71 @@
+package com.back.user.mapper;
+
+import com.back.user.model.dto.response.UserInfo;
+import com.back.user.model.dto.response.RelationshipStatus;
+import com.back.user.model.dto.response.PrivacySettings;
+import com.back.user.model.entity.User;
+import com.back.video.repo.IVideoRepository;
+import lombok.RequiredArgsConstructor;
+import org.springframework.stereotype.Component;
+
+import java.util.List;
+import java.util.stream.Collectors;
+
+@Component
+@RequiredArgsConstructor
+public class UserInfoMapper {
+
+    private final IVideoRepository videoRepository;
+
+    public UserInfo buildUserInfo(User user) {
+        return buildUserInfo(user, null);
+    }
+
+    public UserInfo buildUserInfo(User user, RelationshipStatus relationship) {
+        List<String> roles = user.getRoles().stream()
+                .map(role -> role.getName().name())
+                .collect(Collectors.toList());
+
+        return UserInfo.builder()
+                .id(user.getId())
+                .username(user.getUsername())
+                .nickname(user.getNickname())
+                .email(user.getEmail())
+                .bio(user.getBio())
+                .avatarUrl(user.getAvatarUrl())
+                .coverUrl(user.getCoverUrl())
+                .followersCount(user.getFollowersCount())
+                .followingCount(user.getFollowingCount())
+                .totalLikes(user.getTotalLikes())
+                .videoCount(videoRepository.countByUserIdAndDeletedAtIsNull(user.getId()))
+                .verified(user.getVerified())
+                .isPrivate(user.getIsPrivate())
+                .status(user.getStatus() != null ? user.getStatus().name() : null)
+                .accountType(user.getAccountType() != null ? user.getAccountType().name() : null)
+                .websiteUrl(user.getWebsiteUrl())
+                .instagramHandle(user.getInstagramHandle())
+                .youtubeHandle(user.getYoutubeHandle())
+                .gender(user.getGender() != null ? user.getGender().name() : null)
+                .region(user.getRegion())
+                .dateOfBirth(user.getDateOfBirth())
+                .privacySettings(PrivacySettings.builder()
+                        .allowComments(user.getAllowComments())
+                        .allowDuet(user.getAllowDuet())
+                        .allowStitch(user.getAllowStitch())
+                        .allowDownload(user.getAllowDownload())
+                        .allowMessageFromEveryone(user.getAllowMessageFromEveryone())
+                        .showPosts(user.getShowPosts())
+                        .showReposts(user.getShowReposts())
+                        .showLikedVideos(user.getShowLikedVideos())
+                        .showFavorites(user.getShowFavorites())
+                        .defaultCommentPermission(Boolean.TRUE.equals(user.getAllowComments()) ? "EVERYONE" : "NO_ONE")
+                        .messagePrivacy(Boolean.TRUE.equals(user.getAllowMessageFromEveryone()) ? "EVERYONE" : "NO_ONE")
+                        .build())
+                .roles(roles)
+                .relationship(relationship)
+                .onboarded(user.getOnboarded())
+                .createdAt(user.getCreatedAt())
+                .deletedAt(user.getDeletedAt())
+                .build();
+    }
+}
