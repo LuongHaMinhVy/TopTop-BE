@@ -49,6 +49,9 @@ spring:
     properties:
       hibernate:
         format_sql: false
+        query:
+          plan_cache_max_size: 256
+          in_clause_parameter_padding: true
 
   logging:
     level:
