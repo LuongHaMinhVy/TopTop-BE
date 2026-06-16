@@ -9,7 +9,6 @@ import com.back.block.service.IUserBlockService;
 import com.back.common.service.R2StorageService;
 import com.back.common.utils.exception.AppException;
 import com.back.common.utils.exception.ErrorCode;
-import com.back.moderation.model.enums.MusicCopyrightStatus;
 import com.back.moderation.model.enums.VideoModerationStatus;
 import com.back.recommendation.service.IVideoRecommendationService;
 import com.back.sound.mapper.SoundMapper;
@@ -28,6 +27,7 @@ import com.back.video.model.dto.response.VideoRepostUserResponseDTO;
 import com.back.video.model.dto.response.VideoStatsResponseDTO;
 import com.back.video.model.dto.response.VideoUploadRequestDTO;
 import com.back.video.model.entity.Video;
+import com.back.video.model.entity.VideoCategory;
 import com.back.video.model.entity.VideoLike;
 import com.back.video.model.entity.VideoNotInterested;
 import com.back.video.model.entity.VideoRepost;
@@ -37,6 +37,7 @@ import com.back.video.repo.IVideoNotInterestedRepository;
 import com.back.video.repo.IVideoRepository;
 import com.back.video.repo.IVideoRepostRepository;
 import com.back.video.repo.IVideoViewRepository;
+import com.back.video.repo.IVideoCategoryRepository;
 import com.back.hashtag.repo.IHashtagRepository;
 import com.back.hashtag.model.entity.Hashtag;
 import com.back.video.model.enums.VideoVisibility;
@@ -59,15 +60,11 @@ import java.nio.file.Path;
 import java.time.LocalDateTime;
 import java.time.LocalDate;
 import java.time.LocalTime;
-import java.util.ArrayList;
-import java.util.LinkedHashSet;
-import java.util.Map;
-import java.util.HashSet;
-import java.util.List;
-import java.util.Set;
-import java.util.UUID;
+import java.util.*;
+import java.util.concurrent.ThreadLocalRandom;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
+import java.util.stream.Collectors;
 
 import org.springframework.data.redis.core.RedisTemplate;
 import com.back.video.model.dto.request.InitVideoUploadRequestDTO;
@@ -77,16 +74,21 @@ import com.back.video.model.dto.response.InitVideoUploadResponseDTO;
 import com.back.moderation.service.ITextContentModerationService;
 import com.back.moderation.service.IVideoModerationService;
 
+import com.back.recommendation.service.UserInterestProfileService;
+import com.back.recommendation.service.UserInterestProfile;
+import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.core.type.TypeReference;
+
 @Slf4j
 @Service
 @RequiredArgsConstructor
 public class VideoServiceImpl implements IVideoService {
 
-    private static final int FEED_CANDIDATE_LIMIT = 500;
-    private static final int RECENT_VIEWED_EXCLUSION_LIMIT = 200;
+    private static final int RECENT_VIEWED_EXCLUSION_LIMIT = 1000;
     private static final java.time.Duration FEED_ORDER_TTL = java.time.Duration.ofMinutes(15);
 
     private final IVideoRepository videoRepository;
+    private final IVideoCategoryRepository videoCategoryRepository;
     private final IVideoLikeRepository videoLikeRepository;
     private final IVideoNotInterestedRepository videoNotInterestedRepository;
     private final IVideoRepostRepository videoRepostRepository;
@@ -94,7 +96,6 @@ public class VideoServiceImpl implements IVideoService {
     private final R2StorageService storageService;
     private final IHashtagRepository hashtagRepo;
     private final ISavedVideoRepository ISavedVideoRepository;
-    private final ICollectionVideoRepository ICollectionVideoRepository;
     private final IUserBlockService userBlockService;
     private final com.back.follow.repo.IFollowRepo followRepo;
     private final ISoundRepository soundRepository;
@@ -109,6 +110,8 @@ public class VideoServiceImpl implements IVideoService {
     private final IVideoModerationService videoModerationService;
     private final IUserContentFilterTagRepo contentFilterTagRepo;
     private final GeminiDescriptionTranslationService descriptionTranslationService;
+    private final UserInterestProfileService userInterestProfileService;
+    private final ObjectMapper objectMapper;
 
     @Override
     public InitVideoUploadResponseDTO initVideoUpload(InitVideoUploadRequestDTO requestDTO) {
@@ -203,10 +206,17 @@ public class VideoServiceImpl implements IVideoService {
             }
         }
 
+        VideoCategory videoCategory = null;
+        if (requestDTO.getCategory() != null) {
+            videoCategory = videoCategoryRepository.findByCodeIgnoreCaseOrNameIgnoreCase(requestDTO.getCategory(), requestDTO.getCategory())
+                    .orElseGet(() -> videoCategoryRepository.findByCodeIgnoreCase("OTHER").orElse(null));
+        }
+
         Video video = Video.builder()
                 .title(requestDTO.getTitle())
                 .description(requestDTO.getDescription())
-                .category(requestDTO.getCategory())
+                .category(videoCategory != null ? videoCategory.getName() : requestDTO.getCategory())
+                .videoCategory(videoCategory)
                 .fileUrl(fileUrl)
                 .thumbnailUrl(coverUrl)
                 .duration(duration)
@@ -290,10 +300,17 @@ public class VideoServiceImpl implements IVideoService {
 
         Sound selectedSound = resolveSelectedSound(requestDTO.getSoundId());
 
+        VideoCategory videoCategory = null;
+        if (requestDTO.getCategory() != null) {
+            videoCategory = videoCategoryRepository.findByCodeIgnoreCaseOrNameIgnoreCase(requestDTO.getCategory(), requestDTO.getCategory())
+                    .orElseGet(() -> videoCategoryRepository.findByCodeIgnoreCase("OTHER").orElse(null));
+        }
+
         Video video = Video.builder()
                 .title(requestDTO.getTitle())
                 .description(requestDTO.getDescription())
-                .category(requestDTO.getCategory())
+                .category(videoCategory != null ? videoCategory.getName() : requestDTO.getCategory())
+                .videoCategory(videoCategory)
                 .fileUrl(url)
                 .thumbnailUrl(coverUrl)
                 .duration(duration)
@@ -361,10 +378,58 @@ public class VideoServiceImpl implements IVideoService {
     public Page<VideoResponseDTO> getAllVideos(Pageable pageable) {
         User currentUser = getCurrentUser();
         Long viewerId = currentUser == null ? null : currentUser.getId();
+
+        // Dynamically scale candidate limits based on total approved video count
+        long totalVideos = videoRepository.countByModerationStatus(VideoModerationStatus.APPROVED);
+        if (totalVideos == 0) {
+            totalVideos = videoRepository.count();
+        }
+
+        int newestLimit = (int)Math.clamp(totalVideos * 0.8, 50, 400);
+        int viralLimit = (int)Math.clamp(totalVideos * 0.4, 20, 150);
+        int followingLimit = (int)Math.clamp(totalVideos * 0.2, 10, 100);
+        int discoveryLimit = (int)Math.clamp(totalVideos * 0.3, 10, 150);
+        int exclusionLimit = Math.clamp((int)(totalVideos * 0.9), 50, RECENT_VIEWED_EXCLUSION_LIMIT);
+
+        // 1. Newest
+        List<Video> newest = videoRepository.findAllVisibleForViewer(viewerId, PageRequest.of(0, newestLimit, Sort.by(Sort.Direction.DESC, "createdAt"))).getContent();
+        Set<Video> candidateSet = new LinkedHashSet<>(newest);
         
-        Pageable candidatePageable = PageRequest.of(0, FEED_CANDIDATE_LIMIT, Sort.by(Sort.Direction.DESC, "createdAt"));
-        List<Video> candidates = new java.util.ArrayList<>(videoRepository.findAllVisibleForViewer(viewerId, candidatePageable).getContent());
+        // 2. Viral - high interaction in the last 7 days
+        LocalDateTime sevenDaysAgo = LocalDateTime.now().minusDays(7);
+        List<Video> viral = videoRepository.findViralVideos(viewerId, sevenDaysAgo, PageRequest.of(0, viralLimit));
+        candidateSet.addAll(viral);
+        
+        // 3. Creator - from followed creators
+        if (viewerId != null) {
+            try {
+                List<Video> creator = videoRepository.findFollowingFeed(viewerId, PageRequest.of(0, followingLimit)).getContent();
+                candidateSet.addAll(creator);
+            } catch (Exception e) {
+                log.warn("Failed to retrieve creator pool: {}", e.getMessage());
+            }
+        }
+        
+        // 4. Discovery - random videos
+        try {
+            int randomPage = totalVideos > discoveryLimit ? new Random().nextInt((int) (totalVideos / discoveryLimit)) : 0;
+            List<Video> discovery = videoRepository.findAllVisibleForViewer(viewerId, PageRequest.of(randomPage, discoveryLimit)).getContent();
+            candidateSet.addAll(discovery);
+        } catch (Exception e) {
+            log.warn("Failed to retrieve discovery pool: {}", e.getMessage());
+        }
+
+        List<Video> candidates = new ArrayList<>(candidateSet);
         candidates = distinctVideos(applyViewerFilters(candidates, currentUser));
+
+        // Filtering out avoidCategories
+        UserInterestProfile profile = currentUser != null ? userInterestProfileService.getUserProfile(currentUser.getId()) : null;
+        if (profile != null && profile.getAvoidCategories() != null && !profile.getAvoidCategories().isEmpty()) {
+            candidates.removeIf(video -> {
+                String videoCategory = video.getAiCategory() != null ? video.getAiCategory() : video.getCategory();
+                return videoCategory != null && profile.getAvoidCategories().contains(videoCategory);
+            });
+        }
 
         if (currentUser != null && pageable.getPageNumber() > 0) {
             List<Long> cachedOrder = readFeedOrder(currentUser.getId());
@@ -378,18 +443,39 @@ public class VideoServiceImpl implements IVideoService {
                 ? List.of()
                 : videoViewRepository.findRecentViewedVideoIdsByViewerId(
                         currentUser.getId(),
-                        PageRequest.of(0, RECENT_VIEWED_EXCLUSION_LIMIT));
+                        PageRequest.of(0, exclusionLimit));
 
         List<Video> unseenCandidates = excludeVideoIds(candidates, recentlyViewedIds);
         List<Video> rankedCandidates = unseenCandidates.isEmpty() ? candidates : unseenCandidates;
 
-        rankedCandidates.sort((v1, v2) -> Double.compare(calculateForYouScore(v2, currentUser), calculateForYouScore(v1, currentUser)));
-        rankedCandidates = distinctVideos(new java.util.ArrayList<>(videoRecommendationService.rankForYou(rankedCandidates, currentUser)));
+        // Bulk fetch average completion rates for candidates
+        List<Long> rankedIdsForRates = rankedCandidates.stream().map(Video::getId).collect(Collectors.toList());
+        Map<Long, Double> avgCompletionRates = getAverageCompletionRates(rankedIdsForRates);
+
+        // Generate stable random values for the current request's candidates to enable dynamic shuffling on refresh
+        Map<Long, Double> requestRandomValues = new HashMap<>();
+        Random threadRandom = ThreadLocalRandom.current();
+        for (Video v : rankedCandidates) {
+            requestRandomValues.put(v.getId(), threadRandom.nextDouble());
+        }
+
+        // Sort candidates
+        UserInterestProfile finalProfile = profile;
+        rankedCandidates.sort((v1, v2) -> Double.compare(
+                calculateForYouScore(v2, currentUser, finalProfile, avgCompletionRates, requestRandomValues),
+                calculateForYouScore(v1, currentUser, finalProfile, avgCompletionRates, requestRandomValues)
+        ));
+
+        // AI re-ranking if enabled
+        rankedCandidates = distinctVideos(new ArrayList<>(videoRecommendationService.rankForYou(rankedCandidates, currentUser)));
+
+        // Apply diversity post-processing (author clustering protection)
+        rankedCandidates = applyDiversityPostProcessing(rankedCandidates);
 
         if (!recentlyViewedIds.isEmpty()) {
             Set<Long> rankedIds = rankedCandidates.stream()
                     .map(Video::getId)
-                    .collect(java.util.stream.Collectors.toSet());
+                    .collect(Collectors.toSet());
             candidates.stream()
                     .filter(video -> !rankedIds.contains(video.getId()))
                     .forEach(rankedCandidates::add);
@@ -470,6 +556,8 @@ public class VideoServiceImpl implements IVideoService {
         video.setLikeCount(safe(video.getLikeCount()) + 1);
         videoRepository.save(video);
 
+        userInterestProfileService.evictProfile(currentUser.getId());
+
         if (!video.getUser().getId().equals(currentUser.getId())) {
             notificationService.createNotification(
                     video.getUser(),
@@ -529,6 +617,7 @@ public class VideoServiceImpl implements IVideoService {
         }
 
         redisTemplate.delete(feedOrderKey(currentUser.getId()));
+        userInterestProfileService.evictProfile(currentUser.getId());
     }
 
     @Override
@@ -549,6 +638,7 @@ public class VideoServiceImpl implements IVideoService {
             videoLikeRepository.delete(like);
             video.setLikeCount(Math.max(0L, safe(video.getLikeCount()) - 1));
             videoRepository.save(video);
+            userInterestProfileService.evictProfile(currentUser.getId());
         });
 
         return mapToStatsDTO(video, false);
@@ -624,7 +714,7 @@ public class VideoServiceImpl implements IVideoService {
 
     @Override
     @Transactional
-    public VideoStatsResponseDTO recordVideoView(Long id) {
+    public VideoStatsResponseDTO recordVideoView(Long id, Long watchDurationMs) {
         Video video = videoRepository.findById(id)
                 .orElseThrow(() -> new AppException(ErrorCode.VIDEO_NOT_FOUND));
         if (video.isDeleted()) {
@@ -635,7 +725,7 @@ public class VideoServiceImpl implements IVideoService {
         userBlockService.assertNotBlockedEitherWay(currentUser, video.getUser());
         checkVisibilityOrThrow(video, currentUser);
 
-        recordView(video, currentUser);
+        recordView(video, currentUser, watchDurationMs);
         return mapToStatsDTO(video, currentUser != null && videoLikeRepository.existsByUserIdAndVideoId(currentUser.getId(), id));
     }
 
@@ -646,7 +736,7 @@ public class VideoServiceImpl implements IVideoService {
             throw new AppException(ErrorCode.UNAUTHORIZED);
         }
 
-        int safeDays = Math.max(1, Math.min(days, 60));
+        int safeDays = Math.clamp(days, 1, 60);
         LocalDate today = LocalDate.now();
         LocalDate startDate = today.minusDays(safeDays - 1L);
         LocalDateTime start = startDate.atStartOfDay();
@@ -794,6 +884,9 @@ public class VideoServiceImpl implements IVideoService {
                     .thumbnailUrl(null)
                     .duration(null)
                     .category(video.getCategory())
+                    .videoCategoryId(video.getVideoCategory() != null ? video.getVideoCategory().getId() : null)
+                    .videoCategoryCode(video.getVideoCategory() != null ? video.getVideoCategory().getCode() : null)
+                    .videoCategoryName(video.getVideoCategory() != null ? video.getVideoCategory().getName() : null)
                     .viewCount(0L)
                     .likeCount(0L)
                     .commentCount(0L)
@@ -842,6 +935,9 @@ public class VideoServiceImpl implements IVideoService {
                 .thumbnailUrl(video.getThumbnailUrl())
                 .duration(video.getDuration())
                 .category(video.getCategory())
+                .videoCategoryId(video.getVideoCategory() != null ? video.getVideoCategory().getId() : null)
+                .videoCategoryCode(video.getVideoCategory() != null ? video.getVideoCategory().getCode() : null)
+                .videoCategoryName(video.getVideoCategory() != null ? video.getVideoCategory().getName() : null)
                 .viewCount(video.getViewCount())
                 .likeCount(video.getLikeCount())
                 .commentCount(video.getCommentCount())
@@ -908,15 +1004,29 @@ public class VideoServiceImpl implements IVideoService {
                 + messageAttachmentRepository.countByTypeAndVideoId("VIDEO_POST", videoId);
     }
 
-    private void recordView(Video video, User viewer) {
+    private void recordView(Video video, User viewer, Long watchDurationMs) {
+        Double completionRate = null;
+        if (watchDurationMs != null && video.getDuration() != null && video.getDuration() > 0) {
+            completionRate = (double) watchDurationMs / (video.getDuration() * 1000.0);
+            // Cap at 5.0 to handle looping watch behavior without allowing outliers to excessively skew statistics
+            if (completionRate > 5.0) {
+                completionRate = 5.0;
+            }
+        }
         videoViewRepository.save(VideoView.builder()
                 .video(video)
                 .owner(video.getUser())
                 .viewer(viewer)
+                .watchDurationMs(watchDurationMs)
+                .completionRate(completionRate)
                 .build());
 
         video.setViewCount(safe(video.getViewCount()) + 1);
         videoRepository.save(video);
+
+        if (viewer != null) {
+            userInterestProfileService.evictProfile(viewer.getId());
+        }
     }
 
     private boolean shouldShowRepostUser(User repostUser, User currentUser) {
@@ -960,7 +1070,10 @@ public class VideoServiceImpl implements IVideoService {
             video.setDescription(requestDTO.getDescription());
         }
         if (requestDTO.getCategory() != null) {
-            video.setCategory(requestDTO.getCategory());
+            VideoCategory videoCategory = videoCategoryRepository.findByCodeIgnoreCaseOrNameIgnoreCase(requestDTO.getCategory(), requestDTO.getCategory())
+                    .orElseGet(() -> videoCategoryRepository.findByCodeIgnoreCase("OTHER").orElse(null));
+            video.setVideoCategory(videoCategory);
+            video.setCategory(videoCategory != null ? videoCategory.getName() : requestDTO.getCategory());
         }
         if (requestDTO.getVisibility() != null) {
             video.setVisibility(VideoVisibility.valueOf(requestDTO.getVisibility()));
@@ -1161,7 +1274,18 @@ public class VideoServiceImpl implements IVideoService {
 
     private List<Video> applyViewerFilters(List<Video> candidates, User currentUser) {
         List<Video> filtered = applyContentFilters(candidates, currentUser);
-        if (currentUser == null || filtered == null || filtered.isEmpty()) {
+        if (filtered == null || filtered.isEmpty()) {
+            return filtered;
+        }
+
+        if (currentUser != null) {
+            final Long currentUserId = currentUser.getId();
+            filtered = filtered.stream()
+                    .filter(video -> video.getUser() == null || !video.getUser().getId().equals(currentUserId))
+                    .collect(java.util.stream.Collectors.toCollection(ArrayList::new));
+        }
+
+        if (currentUser == null) {
             return filtered;
         }
 
@@ -1177,7 +1301,7 @@ public class VideoServiceImpl implements IVideoService {
         Set<Long> seenIds = new LinkedHashSet<>();
         return videos.stream()
                 .filter(video -> video != null && video.getId() != null && seenIds.add(video.getId()))
-                .collect(java.util.stream.Collectors.toCollection(ArrayList::new));
+                .collect(Collectors.toCollection(ArrayList::new));
     }
 
     private void cacheFeedOrder(Long userId, List<Video> videos) {
@@ -1240,17 +1364,163 @@ public class VideoServiceImpl implements IVideoService {
         return new org.springframework.data.domain.PageImpl<>(subList, pageable, list.size());
     }
 
-    private double calculateForYouScore(Video video, User currentUser) {
-        double interactionScore = (safe(video.getLikeCount()) * 2.0 + safe(video.getCommentCount()) * 3.0 + safe(video.getSaveCount()) * 4.0) / (safe(video.getViewCount()) + 1.0);
+    private double calculateForYouScore(Video video, User currentUser, UserInterestProfile profile, Map<Long, Double> avgCompletionRates, Map<Long, Double> requestRandomValues) {
+        // 1. Engagement (25%)
+        double interactionScore = (safe(video.getLikeCount()) * 2.0 
+                                + safe(video.getCommentCount()) * 3.0 
+                                + safe(video.getSaveCount()) * 4.0) 
+                                / (safe(video.getViewCount()) + 1.0);
+        double engagement = Math.min(1.0, interactionScore / 5.0);
+
+        // 2. Trending Velocity (15%)
         double trendingScore = Math.log1p(safe(video.getViewCount()) + safe(video.getLikeCount()));
-        long hoursSinceCreated = java.time.temporal.ChronoUnit.HOURS.between(video.getCreatedAt() != null ? video.getCreatedAt() : LocalDateTime.now(), LocalDateTime.now());
+        double trendingVelocity = Math.min(1.0, trendingScore / 15.0);
+
+        // 3. Freshness Decay (10%)
+        long hoursSinceCreated = java.time.temporal.ChronoUnit.HOURS.between(video.getCreatedAt() != null ? video.getCreatedAt() : LocalDateTime.now(java.time.ZoneOffset.UTC), LocalDateTime.now(java.time.ZoneOffset.UTC));
         double freshnessScore = Math.exp(-hoursSinceCreated / 24.0);
+
+        // 4. Completion Rate (20%) - allow looping (completionRate > 1.0) up to a max of 3.0 to boost highly-rewatched content
+        double completionRate = avgCompletionRates != null ? avgCompletionRates.getOrDefault(video.getId(), 0.0) : 0.0;
+        completionRate = Math.min(3.0, completionRate);
+
+        // 5. Topic Relevance (15%)
+        double topicRelevance = 0.0;
+        if (profile != null) {
+            VideoCategory categoryObj = video.getVideoCategory();
+            if (categoryObj != null) {
+                if (profile.getAvoidCategoryIds() != null && profile.getAvoidCategoryIds().contains(categoryObj.getId())) {
+                    topicRelevance = -10.0; // Heavy penalty
+                } else {
+                    double categoryRelevance = 0.0;
+                    if (profile.getTopCategoryIds() != null && profile.getTopCategoryIds().contains(categoryObj.getId())) {
+                        categoryRelevance = 1.0;
+                    }
+                    
+                    double tagRelevance = 0.0;
+                    if (profile.getTopHashtags() != null && !profile.getTopHashtags().isEmpty()) {
+                        int matchCount = 0;
+                        if (video.getAiTagsJson() != null) {
+                            try {
+                                List<String> aiTags = objectMapper.readValue(video.getAiTagsJson(), new TypeReference<List<String>>() {});
+                                for (String tag : aiTags) {
+                                    if (profile.getTopHashtags().contains(tag.toLowerCase())) {
+                                        matchCount++;
+                                    }
+                                }
+                            } catch (Exception ignored) {}
+                        }
+                        tagRelevance = (double) matchCount / Math.max(1, profile.getTopHashtags().size());
+                    }
+                    
+                    topicRelevance = 0.7 * categoryRelevance + 0.3 * tagRelevance;
+                }
+            } else {
+                // Fallback to legacy string-based comparison
+                String videoCategory = video.getAiCategory() != null ? video.getAiCategory() : video.getCategory();
+                if (videoCategory != null && !videoCategory.isBlank()) {
+                    if (profile.getAvoidCategories() != null && profile.getAvoidCategories().contains(videoCategory)) {
+                        topicRelevance = -10.0;
+                    } else {
+                        double categoryRelevance = 0.0;
+                        if (profile.getTopCategories() != null && profile.getTopCategories().contains(videoCategory)) {
+                            categoryRelevance = 1.0;
+                        }
+                        
+                        double tagRelevance = 0.0;
+                        if (profile.getTopHashtags() != null && !profile.getTopHashtags().isEmpty()) {
+                            int matchCount = 0;
+                            if (video.getAiTagsJson() != null) {
+                                try {
+                                    List<String> aiTags = objectMapper.readValue(video.getAiTagsJson(), new TypeReference<List<String>>() {});
+                                    for (String tag : aiTags) {
+                                        if (profile.getTopHashtags().contains(tag.toLowerCase())) {
+                                            matchCount++;
+                                        }
+                                    }
+                                } catch (Exception ignored) {}
+                            }
+                            tagRelevance = (double) matchCount / Math.max(1, profile.getTopHashtags().size());
+                        }
+                        
+                        topicRelevance = 0.7 * categoryRelevance + 0.3 * tagRelevance;
+                    }
+                }
+            }
+        }
+
+        // 6. Creator Affinity (10%)
+        double creatorAffinity = 0.0;
+        if (profile != null && video.getUser() != null) {
+            if (profile.getFavoriteCreatorIds() != null && profile.getFavoriteCreatorIds().contains(video.getUser().getId())) {
+                creatorAffinity = 1.0;
+            }
+        }
+
+        // 7. Exploration Boost (5%) - utilizes request-scoped random values to ensure a fresh, shuffled feed on every F5
+        double explorationBoost = requestRandomValues != null ? requestRandomValues.getOrDefault(video.getId(), 0.0) : 0.0;
+
+        // Weighted Sum
+        return 0.25 * engagement 
+             + 0.15 * trendingVelocity 
+             + 0.10 * freshnessScore 
+             + 0.20 * completionRate 
+             + 0.15 * topicRelevance 
+             + 0.10 * creatorAffinity 
+             + 0.05 * explorationBoost;
+    }
+
+    private Map<Long, Double> getAverageCompletionRates(List<Long> videoIds) {
+        if (videoIds == null || videoIds.isEmpty()) return Map.of();
+        try {
+            List<Object[]> results = videoViewRepository.getAverageCompletionRates(videoIds);
+            Map<Long, Double> map = new java.util.HashMap<>();
+            for (Object[] res : results) {
+                Long videoId = (Long) res[0];
+                Double rate = (Double) res[1];
+                map.put(videoId, rate != null ? rate : 0.0);
+            }
+            return map;
+        } catch (Exception e) {
+            log.warn("Failed to retrieve average completion rates: {}", e.getMessage());
+            return Map.of();
+        }
+    }
+
+    private List<Video> applyDiversityPostProcessing(List<Video> videos) {
+        if (videos == null || videos.size() <= 2) {
+            return videos;
+        }
         
-        long seed = video.getId() + (currentUser != null ? currentUser.getId() : 0L);
-        java.util.Random random = new java.util.Random(seed);
-        double explorationBoost = random.nextDouble();
+        List<Video> result = new ArrayList<>();
+        List<Video> buffer = new ArrayList<>();
         
-        return 0.35 * trendingScore + 0.20 * trendingScore + 0.15 * interactionScore + 0.10 * 1.0 + 0.10 * trendingScore + 0.05 * freshnessScore + 0.05 * explorationBoost;
+        for (Video video : videos) {
+            if (video.getUser() == null) {
+                result.add(video);
+                continue;
+            }
+            
+            Long authorId = video.getUser().getId();
+            int consecutiveCount = 0;
+            for (int i = result.size() - 1; i >= 0; i--) {
+                Video prev = result.get(i);
+                if (prev.getUser() != null && prev.getUser().getId().equals(authorId)) {
+                    consecutiveCount++;
+                } else {
+                    break;
+                }
+            }
+            
+            if (consecutiveCount < 2) {
+                result.add(video);
+            } else {
+                buffer.add(video);
+            }
+        }
+        
+        result.addAll(buffer);
+        return result;
     }
 
     private double calculateFollowingScore(Video video, User currentUser) {
@@ -1280,4 +1550,10 @@ public class VideoServiceImpl implements IVideoService {
         
         return 0.35 * relationshipStrength + 0.30 * freshnessScore + 0.20 * interactionHistory + 0.10 * videoEngagement + 0.05 * randomDiversify;
     }
+
+    @Override
+    public List<VideoCategory> getActiveCategories() {
+        return videoCategoryRepository.findByIsActiveTrue();
+    }
 }
+

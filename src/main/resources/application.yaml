@@ -163,3 +163,13 @@ search:
     index-name: ${OPENSEARCH_INDEX_NAME:toptop_search}
     username: ${OPENSEARCH_USERNAME:}
     password: ${OPENSEARCH_PASSWORD:}
+
+langchain4j:
+  google-ai-gemini:
+    chat-model:
+      api-key: ${GEMINI_API_KEY:}
+      model-name: gemini-2.5-flash
+      temperature: 0.2
+      timeout: 60s
+      log-requests: true
+      log-responses: true

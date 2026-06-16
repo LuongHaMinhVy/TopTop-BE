@@ -3,6 +3,7 @@ package com.back.video.controller;
 import com.back.common.model.dto.response.ApiResponse;
 import com.back.common.utils.Translator;
 import com.back.video.model.dto.request.VideoResponseDTO;
+import com.back.video.model.entity.VideoCategory;
 import com.back.video.model.dto.request.InitVideoUploadRequestDTO;
 import com.back.video.model.dto.request.CompleteVideoUploadRequestDTO;
 import com.back.video.model.dto.response.InitVideoUploadResponseDTO;
@@ -204,8 +205,10 @@ public class VideoController {
 
     @PostMapping("/{id}/view")
     @RateLimit(limit = 50, durationInSeconds = 60)
-    public ResponseEntity<ApiResponse<VideoStatsResponseDTO>> recordVideoView(@PathVariable Long id) {
-        VideoStatsResponseDTO data = videoService.recordVideoView(id);
+    public ResponseEntity<ApiResponse<VideoStatsResponseDTO>> recordVideoView(
+            @PathVariable Long id,
+            @RequestParam(required = false) Long watchDurationMs) {
+        VideoStatsResponseDTO data = videoService.recordVideoView(id, watchDurationMs);
         return ResponseEntity.ok(ApiResponse.<VideoStatsResponseDTO>builder()
                 .message(Translator.toLocale("video.view.success", "Video view recorded successfully"))
                 .data(data)
@@ -308,6 +311,17 @@ public class VideoController {
                 .message(Translator.toLocale("video.liked_list.success", "Liked videos retrieved successfully"))
                 .data(videoPage.getContent())
                 .meta(Meta.from(videoPage))
+                .status(HttpStatus.OK.value())
+                .timestamp(LocalDateTime.now())
+                .build());
+    }
+
+    @GetMapping("/categories")
+    public ResponseEntity<ApiResponse<List<VideoCategory>>> getActiveCategories() {
+        List<VideoCategory> data = videoService.getActiveCategories();
+        return ResponseEntity.ok(ApiResponse.<List<VideoCategory>>builder()
+                .message("Active categories retrieved successfully")
+                .data(data)
                 .status(HttpStatus.OK.value())
                 .timestamp(LocalDateTime.now())
                 .build());

@@ -22,6 +22,10 @@ public class VideoResponseDTO {
     private String thumbnailUrl;
     private Integer duration;
     private String category;
+    private Long videoCategoryId;
+    private String videoCategoryCode;
+    private String videoCategoryName;
+
     private Long viewCount;
     private Long likeCount;
     private Long commentCount;

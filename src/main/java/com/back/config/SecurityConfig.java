@@ -76,6 +76,7 @@ public class SecurityConfig {
 
                         // ── Video endpoints ──────────────────────────────────────
                         .requestMatchers(HttpMethod.GET, "/api/v1/videos").permitAll()
+                        .requestMatchers(HttpMethod.GET, "/api/v1/videos/categories").permitAll()
                         .requestMatchers(HttpMethod.GET, "/api/v1/videos/{id}").permitAll()
                         .requestMatchers(HttpMethod.GET, "/api/v1/videos/{id}/description-translation").permitAll()
                         .requestMatchers(HttpMethod.GET, "/api/v1/videos/user/{userId}").permitAll()

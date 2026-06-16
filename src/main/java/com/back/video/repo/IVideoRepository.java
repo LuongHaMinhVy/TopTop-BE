@@ -261,4 +261,26 @@ public interface IVideoRepository extends JpaRepository<Video, Long> {
             ORDER BY v.createdAt DESC
             """)
     Page<Video> findPublicVideosBySoundId(@Param("soundId") Long soundId, Pageable pageable);
+
+    @EntityGraph(attributePaths = {"user"})
+    @Query("""
+        SELECT v FROM Video v
+        WHERE v.deletedAt IS NULL
+          AND v.user.deletedAt IS NULL
+          AND v.visibility = com.back.video.model.enums.VideoVisibility.PUBLIC
+          AND v.moderationStatus = com.back.moderation.model.enums.VideoModerationStatus.APPROVED
+          AND v.createdAt >= :cutoffTime
+          AND (
+              :viewerId IS NULL
+              OR NOT EXISTS (
+                  SELECT b.id FROM UserBlock b
+                  WHERE (b.blocker.id = :viewerId AND b.blocked = v.user)
+                     OR (b.blocked.id = :viewerId AND b.blocker = v.user)
+              )
+          )
+        ORDER BY (v.likeCount * 2 + v.commentCount * 3 + v.saveCount * 4) DESC
+    """)
+    List<Video> findViralVideos(@Param("viewerId") Long viewerId, @Param("cutoffTime") LocalDateTime cutoffTime, Pageable pageable);
+
+    List<Video> findByVideoCategoryIsNull();
 }

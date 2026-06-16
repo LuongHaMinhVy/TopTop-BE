@@ -40,6 +40,11 @@ public class Video extends BaseEntity {
     @Column
     private String category;
 
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "video_category_id")
+    private VideoCategory videoCategory;
+
+
     @Builder.Default
     @Column(nullable = false)
     private Long viewCount = 0L;
@@ -125,6 +130,21 @@ public class Video extends BaseEntity {
 
     @Column(name = "edit_instructions_json", columnDefinition = "TEXT")
     private String editInstructionsJson;
+
+    @Column(name = "ai_category")
+    private String aiCategory;
+
+    @Column(name = "ai_tags_json", columnDefinition = "TEXT")
+    private String aiTagsJson;
+
+    @Column(name = "detected_language")
+    private String detectedLanguage;
+
+    @Column(name = "content_mood")
+    private String contentMood;
+
+    @Column(name = "content_quality_score")
+    private Double contentQualityScore;
 
     public boolean isDeleted() {
         return deletedAt != null;

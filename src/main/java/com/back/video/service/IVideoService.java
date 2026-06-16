@@ -30,7 +30,7 @@ public interface IVideoService {
     VideoStatsResponseDTO unlikeVideo(Long id);
     VideoStatsResponseDTO repostVideo(Long id);
     VideoStatsResponseDTO unrepostVideo(Long id);
-    VideoStatsResponseDTO recordVideoView(Long id);
+    VideoStatsResponseDTO recordVideoView(Long id, Long watchDurationMs);
     void markNotInterested(Long id);
     List<VideoDailyMetricResponseDTO> getStudioDailyViews(int days);
     VideoResponseDTO getVideoByUsernameAndId(String username, Long videoId);
@@ -40,4 +40,6 @@ public interface IVideoService {
     Page<VideoResponseDTO> getRepostedVideosByUsername(String username, Pageable pageable);
     Page<VideoResponseDTO> getFollowingFeed(Pageable pageable);
     Page<VideoResponseDTO> getFriendsFeed(Pageable pageable);
+    List<com.back.video.model.entity.VideoCategory> getActiveCategories();
 }
+

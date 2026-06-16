@@ -16,6 +16,12 @@ public interface IVideoNotInterestedRepository extends JpaRepository<VideoNotInt
     @Query("SELECT vni.video.id FROM VideoNotInterested vni WHERE vni.user.id = :userId")
     List<Long> findVideoIdsByUserId(@Param("userId") Long userId);
 
+    @Query("SELECT DISTINCT COALESCE(v.aiCategory, v.category) FROM VideoNotInterested vni JOIN vni.video v WHERE vni.user.id = :userId AND (v.aiCategory IS NOT NULL OR v.category IS NOT NULL)")
+    List<String> findAvoidCategoriesByUserId(@Param("userId") Long userId);
+
+    @Query("SELECT DISTINCT v.videoCategory.id FROM VideoNotInterested vni JOIN vni.video v WHERE vni.user.id = :userId AND v.videoCategory.id IS NOT NULL")
+    List<Long> findAvoidCategoryIdsByUserId(@Param("userId") Long userId);
+
     @Modifying
     void deleteByVideoId(Long videoId);
 

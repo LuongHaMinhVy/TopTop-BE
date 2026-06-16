@@ -33,4 +33,10 @@ public class VideoView extends BaseEntity {
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "viewer_id")
     private User viewer;
+
+    @Column(name = "watch_duration_ms")
+    private Long watchDurationMs;
+
+    @Column(name = "completion_rate")
+    private Double completionRate;
 }

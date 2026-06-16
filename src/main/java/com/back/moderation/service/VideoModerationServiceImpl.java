@@ -13,6 +13,7 @@ import com.back.moderation.repository.IVideoModerationFrameRepository;
 import com.back.moderation.repository.IVideoModerationResultRepository;
 import com.back.video.model.entity.Video;
 import com.back.video.repo.IVideoRepository;
+import com.back.recommendation.service.GeminiContentAnalysisService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
@@ -46,6 +47,7 @@ public class VideoModerationServiceImpl implements IVideoModerationService {
     private final GeminiModerationProvider moderationProvider;
     private final IMusicCopyrightService musicCopyrightService;
     private final FrameExtractionService frameExtractionService;
+    private final GeminiContentAnalysisService contentAnalysisService;
 
     @Value("${moderation.auto-approve-threshold:0.35}")
     private double autoApproveThreshold;
@@ -126,8 +128,16 @@ public class VideoModerationServiceImpl implements IVideoModerationService {
             double textRisk = textResult.riskScore();
 
             // --- Frame extraction & image moderation (FFmpeg + Gemini Vision) ---
+            List<byte[]> frameBytes = List.of();
+            if (contentModerationCheckEnabled) {
+                String videoUrl = video.getFileUrl();
+                if (videoUrl != null && !videoUrl.isBlank()) {
+                    frameBytes = frameExtractionService.extractFrames(videoUrl);
+                }
+            }
+
             List<VideoModerationFrame> frames = contentModerationCheckEnabled
-                    ? extractAndAnalyseFrames(video)
+                    ? extractAndAnalyseFrames(video, frameBytes)
                     : List.of();
             double imageRisk = frames.stream()
                     .mapToDouble(f -> f.getRiskScore() != null ? f.getRiskScore() : 0.0)
@@ -210,6 +220,15 @@ public class VideoModerationServiceImpl implements IVideoModerationService {
                     previousStatus, newStatus.name(), auditAction, reasonCode, reasonMessage);
 
             log.info("Moderation done for video {}: {} (risk={})", videoId, newStatus, riskScore);
+
+            // --- Run AI Content Analysis if APPROVED ---
+            if (newStatus == VideoModerationStatus.APPROVED) {
+                try {
+                    contentAnalysisService.analyseContent(video, frameBytes);
+                } catch (Exception e) {
+                    log.error("Failed to run Gemini content analysis for video {}: {}", videoId, e.getMessage(), e);
+                }
+            }
         } catch (Exception e) {
             log.error("Moderation failed for video {}: {}", videoId, e.getMessage(), e);
             videoRepository.findById(videoId).ifPresent(v -> {
@@ -232,16 +251,9 @@ public class VideoModerationServiceImpl implements IVideoModerationService {
      * to Gemini Vision for combined safety + quality analysis.
      * Falls back gracefully to empty frames on any extraction failure.
      */
-    private List<VideoModerationFrame> extractAndAnalyseFrames(Video video) {
-        String videoUrl = video.getFileUrl();
-        if (videoUrl == null || videoUrl.isBlank()) {
-            log.warn("Video {} has no fileUrl, skipping frame analysis", video.getId());
-            return List.of();
-        }
-
-        List<byte[]> frameBytes = frameExtractionService.extractFrames(videoUrl);
-        if (frameBytes.isEmpty()) {
-            log.warn("No frames extracted for video {}", video.getId());
+    private List<VideoModerationFrame> extractAndAnalyseFrames(Video video, List<byte[]> frameBytes) {
+        if (frameBytes == null || frameBytes.isEmpty()) {
+            log.warn("No frames extracted or available for video {}", video.getId());
             return List.of();
         }
 

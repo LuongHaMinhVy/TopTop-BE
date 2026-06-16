@@ -49,7 +49,6 @@ public class AuthServiceImpl implements IAuthService {
     private final ICookieService ICookieService;
     private final BlacklistedTokenService blacklistedTokenService;
     private final VerificationTokenService verificationTokenService;
-    private final Translator translator;
     private final UserInfoMapper userInfoMapper;
     private final FrontendProperties frontendProperties;
 
